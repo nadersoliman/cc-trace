@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Edit(~/projects/**)",
+      "Glob",
+      "Grep",
+      "Read(~/projects/**)",
+      "Write(~/projects/**)"
+    ]
+  },
+  "env": {
+    "OTEL_SERVICE_NAME": "project@cc-trace",
+    "OTEL_RESOURCE_ATTRIBUTES": "project.name=cc-trace,project.agent=claude"
+  }
+}

@@ -1,0 +1,5 @@
+# Compiled binary
+otel_trace_hook
+
+# OS
+.DS_Store

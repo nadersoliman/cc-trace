@@ -14,6 +14,8 @@ var (
 	homeDir      string
 	logFilePath  string
 	debugEnabled bool
+	dumpEnabled  bool
+	dumpDir      = "/tmp/cc-trace/dumps"
 )
 
 func init() {
@@ -25,6 +27,7 @@ func init() {
 	}
 	logFilePath = filepath.Join(homeDir, ".claude", "state", "otel_trace_hook.log")
 	debugEnabled = strings.EqualFold(os.Getenv("CC_OTEL_TRACE_DEBUG"), "true")
+	dumpEnabled = strings.EqualFold(os.Getenv("CC_OTEL_TRACE_DUMP"), "true")
 	initStatePaths(homeDir)
 }
 
@@ -67,6 +70,10 @@ func main() {
 		os.Exit(0)
 	}
 
+	if dumpEnabled {
+		dumpPayload(input.HookEventName, input.SessionID, data)
+	}
+
 	debugLog(fmt.Sprintf("Event: %s, Session: %s", input.HookEventName, input.SessionID))
 
 	switch input.HookEventName {
@@ -78,6 +85,56 @@ func main() {
 		handleStop(input)
 	default:
 		debugLog(fmt.Sprintf("Unknown event: %s", input.HookEventName))
+	}
+}
+
+func dumpPayload(event, sessionID string, raw []byte) {
+	_ = os.MkdirAll(dumpDir, 0o755)
+	sid := sessionID
+	if len(sid) > 8 {
+		sid = sid[:8]
+	}
+	ts := time.Now().Format("20060102-150405.000")
+	filename := fmt.Sprintf("%s_%s_%s.json", event, sid, ts)
+	path := filepath.Join(dumpDir, filename)
+
+	// Pretty-print the JSON for readability.
+	var pretty json.RawMessage
+	if json.Unmarshal(raw, &pretty) == nil {
+		if formatted, err := json.MarshalIndent(pretty, "", "  "); err == nil {
+			raw = formatted
+		}
+	}
+
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		debugLog(fmt.Sprintf("Failed to dump payload: %v", err))
+	} else {
+		debugLog(fmt.Sprintf("Dumped %s payload to %s", event, path))
+	}
+}
+
+func dumpTranscript(transcriptPath, sessionID string) {
+	if transcriptPath == "" {
+		return
+	}
+	_ = os.MkdirAll(dumpDir, 0o755)
+	sid := sessionID
+	if len(sid) > 8 {
+		sid = sid[:8]
+	}
+	ts := time.Now().Format("20060102-150405.000")
+	filename := fmt.Sprintf("transcript_%s_%s.jsonl", sid, ts)
+	destPath := filepath.Join(dumpDir, filename)
+
+	data, err := os.ReadFile(transcriptPath)
+	if err != nil {
+		debugLog(fmt.Sprintf("Failed to read transcript for dump: %v", err))
+		return
+	}
+	if err := os.WriteFile(destPath, data, 0o644); err != nil {
+		debugLog(fmt.Sprintf("Failed to dump transcript: %v", err))
+	} else {
+		debugLog(fmt.Sprintf("Dumped transcript to %s (%d bytes)", destPath, len(data)))
 	}
 }
 
@@ -146,6 +203,10 @@ func handleStop(input HookInput) {
 	if transcriptPath == "" {
 		logMsg("ERROR", "No transcript path available")
 		return
+	}
+
+	if dumpEnabled {
+		dumpTranscript(transcriptPath, sessionID)
 	}
 
 	// Parse transcript.

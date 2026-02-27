@@ -170,6 +170,18 @@ func extractModel(msg map[string]interface{}) string {
 	return ""
 }
 
+// extractStopReason gets the stop_reason from an assistant message.
+func extractStopReason(msg map[string]interface{}) string {
+	if inner, ok := msg["message"]; ok {
+		if innerMap, ok := inner.(map[string]interface{}); ok {
+			if sr, ok := innerMap["stop_reason"].(string); ok {
+				return sr
+			}
+		}
+	}
+	return ""
+}
+
 // extractUsage gets token counts from an assistant message's usage field.
 func extractUsage(msg map[string]interface{}) (input, output, cacheRead, cacheCreation int) {
 	var usage map[string]interface{}
@@ -233,6 +245,7 @@ func parseTranscript(transcriptPath string, startLine int) ([]Turn, int, error) 
 	var currentAssistantParts []map[string]interface{}
 	var currentMsgID string
 	var currentToolResults []map[string]interface{}
+	var currentDurationMs int
 
 	finalizeParts := func() {
 		if currentMsgID != "" && len(currentAssistantParts) > 0 {
@@ -255,10 +268,14 @@ func parseTranscript(transcriptPath string, startLine int) ([]Turn, int, error) 
 		userTS := extractTimestamp(currentUser)
 
 		var model string
+		var stopReason string
 		var inputTok, outputTok, cacheReadTok, cacheCreationTok int
 		for _, am := range currentAssistants {
 			if m := extractModel(am); m != "" {
 				model = m
+			}
+			if sr := extractStopReason(am); sr != "" {
+				stopReason = sr
 			}
 			in, out, cr, cc := extractUsage(am)
 			inputTok += in
@@ -324,6 +341,8 @@ func parseTranscript(transcriptPath string, startLine int) ([]Turn, int, error) 
 			OutputTokens:        outputTok,
 			CacheReadTokens:     cacheReadTok,
 			CacheCreationTokens: cacheCreationTok,
+			StopReason:          stopReason,
+			DurationMs:          currentDurationMs,
 			StartTime:           userTS,
 			EndTime:             endTS,
 		})
@@ -333,6 +352,14 @@ func parseTranscript(transcriptPath string, startLine int) ([]Turn, int, error) 
 	for _, msg := range newMessages {
 		role := msgRole(msg)
 		switch role {
+		case "system":
+			// Capture turn_duration system messages.
+			if sub, _ := msg["subtype"].(string); sub == "turn_duration" {
+				if dur, ok := msg["durationMs"].(float64); ok {
+					currentDurationMs = int(dur)
+				}
+			}
+
 		case "user":
 			if isToolResult(msg) {
 				currentToolResults = append(currentToolResults, msg)
@@ -345,6 +372,7 @@ func parseTranscript(transcriptPath string, startLine int) ([]Turn, int, error) 
 			currentAssistantParts = nil
 			currentMsgID = ""
 			currentToolResults = nil
+			currentDurationMs = 0
 
 		case "assistant":
 			msgID := assistantMsgID(msg)

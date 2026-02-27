@@ -67,6 +67,8 @@ type Turn struct {
 	OutputTokens        int
 	CacheReadTokens     int
 	CacheCreationTokens int
+	StopReason          string
+	DurationMs          int
 	StartTime           time.Time
 	EndTime             time.Time
 }

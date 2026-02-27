@@ -131,29 +131,40 @@ func exportSessionTrace(sessionID string, turns []Turn, toolSpanData []ToolSpanD
 
 	// Create turn spans as children of session.
 	for _, turn := range turns {
+		turnAttrs := []attribute.KeyValue{
+			attribute.Int("turn.number", turn.Number),
+			attribute.String("user.prompt", truncate(turn.UserText, 500)),
+			attribute.Int("user.prompt_length", len(turn.UserText)),
+		}
+		if turn.DurationMs > 0 {
+			turnAttrs = append(turnAttrs, attribute.Int("turn.duration_ms", turn.DurationMs))
+		}
+		if turn.StopReason != "" {
+			turnAttrs = append(turnAttrs, attribute.String("turn.stop_reason", turn.StopReason))
+		}
 		_, turnSpan := tracer.Start(sessionCtx, fmt.Sprintf("Turn %d", turn.Number),
 			trace.WithTimestamp(turn.StartTime),
-			trace.WithAttributes(
-				attribute.Int("turn.number", turn.Number),
-				attribute.String("user.prompt", truncate(turn.UserText, 500)),
-				attribute.Int("user.prompt_length", len(turn.UserText)),
-			),
+			trace.WithAttributes(turnAttrs...),
 		)
 
 		turnCtx := trace.ContextWithSpan(sessionCtx, turnSpan)
 
 		// LLM Response span.
 		if turn.Model != "" {
+			llmAttrs := []attribute.KeyValue{
+				attribute.String("gen_ai.system", "anthropic"),
+				attribute.String("gen_ai.request.model", turn.Model),
+				attribute.Int("gen_ai.usage.input_tokens", turn.InputTokens),
+				attribute.Int("gen_ai.usage.output_tokens", turn.OutputTokens),
+				attribute.Int("gen_ai.usage.cache_read_tokens", turn.CacheReadTokens),
+				attribute.Int("gen_ai.usage.cache_creation_tokens", turn.CacheCreationTokens),
+			}
+			if turn.StopReason != "" {
+				llmAttrs = append(llmAttrs, attribute.String("gen_ai.response.finish_reason", turn.StopReason))
+			}
 			_, llmSpan := tracer.Start(turnCtx, "LLM Response",
 				trace.WithTimestamp(turn.StartTime),
-				trace.WithAttributes(
-					attribute.String("gen_ai.system", "anthropic"),
-					attribute.String("gen_ai.request.model", turn.Model),
-					attribute.Int("gen_ai.usage.input_tokens", turn.InputTokens),
-					attribute.Int("gen_ai.usage.output_tokens", turn.OutputTokens),
-					attribute.Int("gen_ai.usage.cache_read_tokens", turn.CacheReadTokens),
-					attribute.Int("gen_ai.usage.cache_creation_tokens", turn.CacheCreationTokens),
-				),
+				trace.WithAttributes(llmAttrs...),
 			)
 			llmSpan.End(trace.WithTimestamp(turn.EndTime))
 		}
@@ -253,16 +264,20 @@ func emitSubagentSpans(tracer trace.Tracer, taskSpan trace.Span, turnCtx context
 
 		// LLM Response span.
 		if subTurn.Model != "" {
+			subLLMAttrs := []attribute.KeyValue{
+				attribute.String("gen_ai.system", "anthropic"),
+				attribute.String("gen_ai.request.model", subTurn.Model),
+				attribute.Int("gen_ai.usage.input_tokens", subTurn.InputTokens),
+				attribute.Int("gen_ai.usage.output_tokens", subTurn.OutputTokens),
+				attribute.Int("gen_ai.usage.cache_read_tokens", subTurn.CacheReadTokens),
+				attribute.Int("gen_ai.usage.cache_creation_tokens", subTurn.CacheCreationTokens),
+			}
+			if subTurn.StopReason != "" {
+				subLLMAttrs = append(subLLMAttrs, attribute.String("gen_ai.response.finish_reason", subTurn.StopReason))
+			}
 			_, llmSpan := tracer.Start(subTurnCtx, "LLM Response",
 				trace.WithTimestamp(subTurn.StartTime),
-				trace.WithAttributes(
-					attribute.String("gen_ai.system", "anthropic"),
-					attribute.String("gen_ai.request.model", subTurn.Model),
-					attribute.Int("gen_ai.usage.input_tokens", subTurn.InputTokens),
-					attribute.Int("gen_ai.usage.output_tokens", subTurn.OutputTokens),
-					attribute.Int("gen_ai.usage.cache_read_tokens", subTurn.CacheReadTokens),
-					attribute.Int("gen_ai.usage.cache_creation_tokens", subTurn.CacheCreationTokens),
-				),
+				trace.WithAttributes(subLLMAttrs...),
 			)
 			llmSpan.End(trace.WithTimestamp(subTurn.EndTime))
 		}

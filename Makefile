@@ -1,7 +1,7 @@
 BINARY_NAME = otel_trace_hook
 INSTALL_DIR = $(HOME)/.claude/hooks
 
-.PHONY: build install clean test test-race test-cover
+.PHONY: build install clean test test-race test-cover fmt setup-hooks
 
 build:
 	go build -o $(BINARY_NAME) .
@@ -22,3 +22,9 @@ test-race:
 
 test-cover:
 	go test -cover ./...
+
+fmt:
+	gofmt -s -w .
+
+setup-hooks:
+	git config core.hooksPath .githooks

@@ -148,9 +148,9 @@ func TestExtractUsage(t *testing.T) {
 	msg := map[string]interface{}{
 		"message": map[string]interface{}{
 			"usage": map[string]interface{}{
-				"input_tokens":              100.0,
-				"output_tokens":             50.0,
-				"cache_read_input_tokens":   30.0,
+				"input_tokens":                100.0,
+				"output_tokens":               50.0,
+				"cache_read_input_tokens":     30.0,
 				"cache_creation_input_tokens": 10.0,
 			},
 		},

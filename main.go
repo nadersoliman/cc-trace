@@ -242,8 +242,8 @@ func handleStop(input HookInput) {
 	// Update state.
 	ss.LastLine = totalLines
 	ss.TurnCount += len(turns)
-	ss.ToolSpans = nil          // Clear after export.
-	ss.PendingSubagents = nil   // Clear after export.
+	ss.ToolSpans = nil        // Clear after export.
+	ss.PendingSubagents = nil // Clear after export.
 	ss.Updated = time.Now()
 
 	if err := saveState(sf); err != nil {

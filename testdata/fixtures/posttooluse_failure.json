@@ -1,0 +1,13 @@
+{
+  "session_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "transcript_path": "/home/testuser/.claude/projects/test-project/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl",
+  "cwd": "/home/testuser/projects/cc-trace",
+  "hook_event_name": "PostToolUseFailure",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "make build"
+  },
+  "tool_use_id": "toolu_test_003",
+  "error": "Exit code 1\nbuild failed",
+  "is_interrupt": false
+}

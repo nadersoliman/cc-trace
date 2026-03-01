@@ -1,0 +1,8 @@
+{
+  "session_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "transcript_path": "WILL_BE_OVERRIDDEN_IN_TEST",
+  "cwd": "/home/testuser/projects/cc-trace",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "Done. The build succeeded."
+}

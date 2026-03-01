@@ -1,0 +1,17 @@
+{
+  "session_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "transcript_path": "/home/testuser/.claude/projects/test-project/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl",
+  "cwd": "/home/testuser/projects/cc-trace",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "TaskUpdate",
+  "tool_input": {
+    "taskId": "1",
+    "status": "completed"
+  },
+  "tool_response": {
+    "success": true,
+    "taskId": "1",
+    "updatedFields": ["status"]
+  },
+  "tool_use_id": "toolu_test_001"
+}

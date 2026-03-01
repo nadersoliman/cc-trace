@@ -1,0 +1,9 @@
+{
+  "session_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "transcript_path": "/home/testuser/.claude/projects/test-project/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl",
+  "cwd": "/home/testuser/projects/cc-trace",
+  "hook_event_name": "SubagentStop",
+  "agent_id": "agent_test_001",
+  "agent_type": "general-purpose",
+  "agent_transcript_path": "WILL_BE_OVERRIDDEN_IN_TEST"
+}

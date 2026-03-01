@@ -1,0 +1,22 @@
+{
+  "sessions": {
+    "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee": {
+      "session_span_id": "",
+      "session_start": "0001-01-01T00:00:00Z",
+      "transcript_path": "/home/testuser/.claude/projects/test-project/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl",
+      "cwd": "/home/testuser/projects/cc-trace",
+      "last_line": 0,
+      "turn_count": 0,
+      "tool_spans": [
+        {
+          "tool_name": "Read",
+          "tool_use_id": "toolu_test_001",
+          "tool_input": {"file_path": "/home/testuser/projects/cc-trace/main.go"},
+          "tool_response": "package main...",
+          "timestamp": "2026-01-15T10:00:04.000Z"
+        }
+      ],
+      "updated": "2026-01-15T10:00:05.000Z"
+    }
+  }
+}

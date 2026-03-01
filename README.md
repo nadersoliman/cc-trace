@@ -1,5 +1,13 @@
 # cc-trace
 
+[![CI](https://github.com/nadersoliman/cc-trace/actions/workflows/ci.yml/badge.svg)](https://github.com/nadersoliman/cc-trace/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/nadersoliman/6e75df2dcb94824b03b934effe541426/raw/coverage.json)](https://github.com/nadersoliman/cc-trace/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/nadersoliman/cc-trace)](https://goreportcard.com/report/github.com/nadersoliman/cc-trace)
+[![Lines of Code](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/nadersoliman/6e75df2dcb94824b03b934effe541426/raw/loc.json)](https://github.com/nadersoliman/cc-trace)
+[![Test Ratio](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/nadersoliman/6e75df2dcb94824b03b934effe541426/raw/test-ratio.json)](https://github.com/nadersoliman/cc-trace)
+[![Go Version](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/nadersoliman/6e75df2dcb94824b03b934effe541426/raw/go-version.json)](https://github.com/nadersoliman/cc-trace)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 OpenTelemetry trace hook for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Turns your sessions into structured OTel traces — every turn, LLM response, tool call, and subagent gets its own span.
 
 ## What You Get

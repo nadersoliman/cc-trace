@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: |
+          go test -race -cover -coverprofile=coverage.out ./... 2>&1 | tee test-output.txt
+          # Extract coverage percentage
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "COVERAGE=${COVERAGE}" >> $GITHUB_ENV
+
+          # Determine coverage badge color
+          COV_INT=${COVERAGE%.*}
+          if [ "$COV_INT" -ge 80 ]; then
+            echo "COV_COLOR=brightgreen" >> $GITHUB_ENV
+          elif [ "$COV_INT" -ge 60 ]; then
+            echo "COV_COLOR=green" >> $GITHUB_ENV
+          elif [ "$COV_INT" -ge 40 ]; then
+            echo "COV_COLOR=yellow" >> $GITHUB_ENV
+          else
+            echo "COV_COLOR=red" >> $GITHUB_ENV
+          fi
+
+      - name: Compute metrics
+        run: |
+          # Source LOC (non-test .go files)
+          SRC_LOC=$(cat $(find . -name '*.go' ! -name '*_test.go' -not -path './vendor/*') | wc -l | tr -d ' ')
+          echo "SRC_LOC=${SRC_LOC}" >> $GITHUB_ENV
+
+          # Test LOC
+          TEST_LOC=$(cat $(find . -name '*_test.go' -not -path './vendor/*') | wc -l | tr -d ' ')
+          echo "TEST_LOC=${TEST_LOC}" >> $GITHUB_ENV
+
+          # Test ratio (test LOC / source LOC)
+          if [ "$SRC_LOC" -gt 0 ]; then
+            RATIO=$(awk "BEGIN {printf \"%.1f\", ${TEST_LOC}/${SRC_LOC}}")
+          else
+            RATIO="0.0"
+          fi
+          echo "TEST_RATIO=${RATIO}" >> $GITHUB_ENV
+
+          # Go version from go.mod
+          GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
+          echo "GO_VERSION=${GO_VERSION}" >> $GITHUB_ENV
+
+      - name: Update coverage badge
+        if: github.ref == 'refs/heads/main'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: 6e75df2dcb94824b03b934effe541426
+          filename: coverage.json
+          label: coverage
+          message: "${{ env.COVERAGE }}%"
+          color: ${{ env.COV_COLOR }}
+
+      - name: Update LOC badge
+        if: github.ref == 'refs/heads/main'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: 6e75df2dcb94824b03b934effe541426
+          filename: loc.json
+          label: lines of code
+          message: "${{ env.SRC_LOC }}"
+          color: informational
+
+      - name: Update test ratio badge
+        if: github.ref == 'refs/heads/main'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: 6e75df2dcb94824b03b934effe541426
+          filename: test-ratio.json
+          label: test ratio
+          message: "${{ env.TEST_RATIO }}x"
+          color: informational
+
+      - name: Update Go version badge
+        if: github.ref == 'refs/heads/main'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: 6e75df2dcb94824b03b934effe541426
+          filename: go-version.json
+          label: go
+          message: "${{ env.GO_VERSION }}"
+          color: "00ADD8"

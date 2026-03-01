@@ -1,0 +1,12 @@
+{
+  "session_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "transcript_path": "/home/testuser/.claude/projects/test-project/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl",
+  "cwd": "/home/testuser/projects/cc-trace",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/testuser/projects/cc-trace/main.go"
+  },
+  "tool_response": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}",
+  "tool_use_id": "toolu_test_002"
+}

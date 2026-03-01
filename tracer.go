@@ -27,10 +27,10 @@ func traceIDFromSession(sessionID string) trace.TraceID {
 	return tid
 }
 
-// initTracer sets up the OTel TracerProvider with OTLP gRPC exporter.
+// initTracer sets up the OTel TracerProvider with OTLP HTTP exporter.
 //
 // All configuration is read from standard OTel environment variables:
-//   - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT (default: http://localhost:4317)
+//   - OTEL_EXPORTER_OTLP_ENDPOINT (default: http://localhost:4318)
 //   - OTEL_SERVICE_NAME (default: unknown_service)
 //   - OTEL_RESOURCE_ATTRIBUTES (default: none)
 func initTracer() (func(), error) {
@@ -43,6 +43,14 @@ func initTracer() (func(), error) {
 	if err != nil {
 		return nil, fmt.Errorf("create exporter: %w", err)
 	}
+
+	return initTracerWithExporter(exporter)
+}
+
+// initTracerWithExporter sets up the OTel TracerProvider with the given exporter.
+// This allows tests to inject an in-memory exporter instead of a real OTLP one.
+func initTracerWithExporter(exporter sdktrace.SpanExporter) (func(), error) {
+	ctx := context.Background()
 
 	res, err := resource.New(ctx,
 		resource.WithFromEnv(),

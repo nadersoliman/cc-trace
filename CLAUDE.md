@@ -12,9 +12,9 @@ make install    # builds and copies binary to ~/.claude/hooks/otel_trace_hook
 
 ## Architecture
 
-Short-lived CLI invoked by Claude Code on **PostToolUse**, **SubagentStop**, and **Stop** hook events via stdin JSON.
+Short-lived CLI invoked by Claude Code on **PostToolUse**, **PostToolUseFailure**, **SubagentStop**, and **Stop** hook events via stdin JSON.
 
-- **PostToolUse** (< 10ms, no network): Records tool data to `~/.claude/state/otel_trace_state.json`
+- **PostToolUse / PostToolUseFailure** (< 10ms, no network): Records tool data to `~/.claude/state/otel_trace_state.json`
 - **SubagentStop** (< 50ms, no network): Parses subagent transcript and stores for later export
 - **Stop** (< 2s): Parses JSONL transcript, creates OTel spans, exports via OTLP/HTTP, updates state
 

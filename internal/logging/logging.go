@@ -8,8 +8,9 @@ import (
 )
 
 var (
-	filePath     string
-	debugEnabled bool
+	filePath      string
+	debugEnabled  bool
+	timingEnabled bool
 )
 
 // Init configures the logging subsystem.
@@ -35,5 +36,17 @@ func Log(level, message string) {
 func Debug(message string) {
 	if debugEnabled {
 		Log("DEBUG", message)
+	}
+}
+
+// InitTiming enables the TIMING log level.
+func InitTiming(enabled bool) {
+	timingEnabled = enabled
+}
+
+// Timing logs a message at TIMING level if timing mode is enabled.
+func Timing(message string) {
+	if timingEnabled {
+		Log("TIMING", message)
 	}
 }

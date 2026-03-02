@@ -62,6 +62,7 @@ func setupTestStateDir(t *testing.T) string {
 	// Initialise logging so Debug calls don't fail.
 	logFile := filepath.Join(dir, "test.log")
 	logging.Init(logFile, false)
+	logging.InitTiming(false)
 	// Prevent dump calls during tests.
 	dumpEnabled = false
 	return dir
@@ -192,14 +193,12 @@ func TestHandleStop_Integration(t *testing.T) {
 
 func TestHandlePostToolUse_TimingOutput(t *testing.T) {
 	dir := setupTestStateDir(t)
-	logFile := filepath.Join(dir, "test.log")
-	logging.Init(logFile, false)
 	logging.InitTiming(true)
 
 	input := loadFixtureInput(t, "posttooluse_read.json")
 	handlePostToolUse(input)
 
-	data, err := os.ReadFile(logFile)
+	data, err := os.ReadFile(filepath.Join(dir, "test.log"))
 	if err != nil {
 		t.Fatalf("read log: %v", err)
 	}

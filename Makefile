@@ -1,4 +1,4 @@
-BINARY_NAME = otel_trace_hook
+BINARY_NAME = cc-trace
 INSTALL_DIR = $(HOME)/.claude/hooks
 
 .PHONY: build install clean test test-race test-cover fmt setup-hooks

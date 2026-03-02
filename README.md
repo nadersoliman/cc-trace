@@ -38,7 +38,7 @@ cd cc-trace
 make install
 ```
 
-This builds the binary and copies it to `~/.claude/hooks/otel_trace_hook`.
+This builds the binary and copies it to `~/.claude/hooks/cc-trace`.
 
 ## Configure
 
@@ -47,10 +47,10 @@ Add to your global Claude Code settings (`~/.claude/settings.json`):
 ```jsonc
 {
   "hooks": {
-    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/otel_trace_hook" }] }],
-    "PostToolUseFailure": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/otel_trace_hook" }] }],
-    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/otel_trace_hook" }] }],
-    "Stop": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/otel_trace_hook" }] }]
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/cc-trace" }] }],
+    "PostToolUseFailure": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/cc-trace" }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/cc-trace" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/cc-trace" }] }]
   }
 }
 ```

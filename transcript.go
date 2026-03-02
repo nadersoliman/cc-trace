@@ -333,7 +333,7 @@ func parseTranscript(transcriptPath string, startLine int) ([]Turn, int, error) 
 		turns = append(turns, Turn{
 			Number:              turnNum,
 			UserText:            userText,
-			UserTimestamp:        userTS,
+			UserTimestamp:       userTS,
 			AssistantMessages:   currentAssistants,
 			ToolCalls:           toolCalls,
 			Model:               model,

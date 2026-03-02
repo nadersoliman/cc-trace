@@ -123,13 +123,13 @@ func TestExportSessionTrace_SingleTurn(t *testing.T) {
 
 	turns := []Turn{
 		{
-			Number:      1,
-			Model:       "claude-sonnet-4-20250514",
-			InputTokens: 100,
+			Number:       1,
+			Model:        "claude-sonnet-4-20250514",
+			InputTokens:  100,
 			OutputTokens: 20,
-			StopReason:  "end_turn",
-			StartTime:   now,
-			EndTime:     now.Add(2 * time.Second),
+			StopReason:   "end_turn",
+			StartTime:    now,
+			EndTime:      now.Add(2 * time.Second),
 		},
 	}
 

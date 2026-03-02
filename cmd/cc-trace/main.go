@@ -181,6 +181,7 @@ func handlePostToolUse(input hook.HookInput) {
 func handleStop(input hook.HookInput) {
 	start := time.Now()
 
+	// Find transcript path from input or state.
 	transcriptPath := input.TranscriptPath
 	sessionID := input.SessionID
 
@@ -196,6 +197,7 @@ func handleStop(input hook.HookInput) {
 	sf := state.LoadState()
 	loadDur := time.Since(loadStart)
 
+	// Fall back to state for session info.
 	ss, ok := sf.Sessions[sessionID]
 	if !ok {
 		ss = &hook.SessionState{}
@@ -213,6 +215,7 @@ func handleStop(input hook.HookInput) {
 		dumpTranscript(transcriptPath, sessionID)
 	}
 
+	// Parse transcript.
 	parseStart := time.Now()
 	turns, totalLines, err := transcript.ParseTranscript(transcriptPath, ss.LastLine)
 	parseDur := time.Since(parseStart)
@@ -230,10 +233,12 @@ func handleStop(input hook.HookInput) {
 		return
 	}
 
+	// Renumber turns based on previous count.
 	for i := range turns {
 		turns[i].Number = ss.TurnCount + i + 1
 	}
 
+	// Init OTel and export.
 	initStart := time.Now()
 	shutdown, err := tracer.InitTracer()
 	initDur := time.Since(initStart)
@@ -242,6 +247,7 @@ func handleStop(input hook.HookInput) {
 		logging.Log("ERROR", fmt.Sprintf("Failed to init tracer: %v", err))
 		return
 	}
+	defer shutdown() // Safety net for panics.
 
 	exportStart := time.Now()
 	tracer.ExportSessionTrace(sessionID, turns, ss.ToolSpans, ss.PendingSubagents, ss)
@@ -251,6 +257,7 @@ func handleStop(input hook.HookInput) {
 	shutdown()
 	shutdownDur := time.Since(shutdownStart)
 
+	// Update state.
 	ss.LastLine = totalLines
 	ss.TurnCount += len(turns)
 	ss.ToolSpans = nil

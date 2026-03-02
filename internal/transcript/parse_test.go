@@ -1,15 +1,26 @@
-package main
+package transcript
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
 
+func fixturePath(t *testing.T, name string) string {
+	t.Helper()
+	p := filepath.Join("..", "..", "testdata", "fixtures", name)
+	if _, err := os.Stat(p); err != nil {
+		t.Fatalf("fixture not found: %s", p)
+	}
+	return p
+}
+
 func TestParseTranscript_Simple(t *testing.T) {
 	path := fixturePath(t, "transcript_simple.jsonl")
-	turns, totalLines, err := parseTranscript(path, 0)
+	turns, totalLines, err := ParseTranscript(path, 0)
 	if err != nil {
-		t.Fatalf("parseTranscript failed: %v", err)
+		t.Fatalf("ParseTranscript failed: %v", err)
 	}
 
 	if totalLines != 4 {
@@ -57,9 +68,9 @@ func TestParseTranscript_Simple(t *testing.T) {
 
 func TestParseTranscript_ToolCalls(t *testing.T) {
 	path := fixturePath(t, "transcript_tools.jsonl")
-	turns, _, err := parseTranscript(path, 0)
+	turns, _, err := ParseTranscript(path, 0)
 	if err != nil {
-		t.Fatalf("parseTranscript failed: %v", err)
+		t.Fatalf("ParseTranscript failed: %v", err)
 	}
 
 	if len(turns) != 1 {
@@ -98,9 +109,9 @@ func TestParseTranscript_ToolCalls(t *testing.T) {
 
 func TestParseTranscript_DurationMs(t *testing.T) {
 	path := fixturePath(t, "transcript_tools.jsonl")
-	turns, _, err := parseTranscript(path, 0)
+	turns, _, err := ParseTranscript(path, 0)
 	if err != nil {
-		t.Fatalf("parseTranscript failed: %v", err)
+		t.Fatalf("ParseTranscript failed: %v", err)
 	}
 
 	if len(turns) != 1 {
@@ -113,9 +124,9 @@ func TestParseTranscript_DurationMs(t *testing.T) {
 
 func TestParseTranscript_StartLine(t *testing.T) {
 	path := fixturePath(t, "transcript_simple.jsonl")
-	turns, totalLines, err := parseTranscript(path, 2)
+	turns, totalLines, err := ParseTranscript(path, 2)
 	if err != nil {
-		t.Fatalf("parseTranscript failed: %v", err)
+		t.Fatalf("ParseTranscript failed: %v", err)
 	}
 
 	if totalLines != 4 {
@@ -131,9 +142,9 @@ func TestParseTranscript_StartLine(t *testing.T) {
 
 func TestParseTranscript_StopReason(t *testing.T) {
 	path := fixturePath(t, "transcript_tools.jsonl")
-	turns, _, err := parseTranscript(path, 0)
+	turns, _, err := ParseTranscript(path, 0)
 	if err != nil {
-		t.Fatalf("parseTranscript failed: %v", err)
+		t.Fatalf("ParseTranscript failed: %v", err)
 	}
 
 	if len(turns) != 1 {
@@ -293,9 +304,9 @@ func TestMergeAssistantParts(t *testing.T) {
 		},
 	}
 
-	merged := mergeAssistantParts([]map[string]interface{}{part1, part2})
+	merged := MergeAssistantParts([]map[string]interface{}{part1, part2})
 	if merged == nil {
-		t.Fatal("mergeAssistantParts returned nil")
+		t.Fatal("MergeAssistantParts returned nil")
 	}
 
 	text := getTextContent(merged)

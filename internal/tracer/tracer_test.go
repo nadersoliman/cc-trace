@@ -1,18 +1,22 @@
-package main
+package tracer
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"cc-trace/internal/hook"
+	"cc-trace/internal/logging"
 
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func TestInitTracerWithExporter(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
-	shutdown, err := initTracerWithExporter(exporter)
+	shutdown, err := InitTracerWithExporter(exporter)
 	if err != nil {
-		t.Fatalf("initTracerWithExporter failed: %v", err)
+		t.Fatalf("InitTracerWithExporter failed: %v", err)
 	}
 	defer shutdown()
 
@@ -27,10 +31,11 @@ func TestInitTracerWithExporter(t *testing.T) {
 // setupTestTracer creates an InMemoryExporter and wires it as the global tracer.
 func setupTestTracer(t *testing.T) (*tracetest.InMemoryExporter, func()) {
 	t.Helper()
+	logging.Init(filepath.Join(t.TempDir(), "test.log"), false)
 	exporter := tracetest.NewInMemoryExporter()
-	shutdown, err := initTracerWithExporter(exporter)
+	shutdown, err := InitTracerWithExporter(exporter)
 	if err != nil {
-		t.Fatalf("initTracerWithExporter: %v", err)
+		t.Fatalf("InitTracerWithExporter: %v", err)
 	}
 	return exporter, shutdown
 }
@@ -121,7 +126,7 @@ func TestExportSessionTrace_SingleTurn(t *testing.T) {
 	sessionID := "test-session-single-turn"
 	now := time.Now()
 
-	turns := []Turn{
+	turns := []hook.Turn{
 		{
 			Number:       1,
 			Model:        "claude-sonnet-4-20250514",
@@ -133,8 +138,8 @@ func TestExportSessionTrace_SingleTurn(t *testing.T) {
 		},
 	}
 
-	ss := &SessionState{}
-	exportSessionTrace(sessionID, turns, nil, nil, ss)
+	ss := &hook.SessionState{}
+	ExportSessionTrace(sessionID, turns, nil, nil, ss)
 
 	spans := exporter.GetSpans()
 	if len(spans) != 3 {
@@ -200,13 +205,13 @@ func TestExportSessionTrace_WithTools(t *testing.T) {
 	sessionID := "test-session-with-tools"
 	now := time.Now()
 
-	turns := []Turn{
+	turns := []hook.Turn{
 		{
 			Number:    1,
 			Model:     "claude-sonnet-4-20250514",
 			StartTime: now,
 			EndTime:   now.Add(3 * time.Second),
-			ToolCalls: []ToolCall{
+			ToolCalls: []hook.ToolCall{
 				{
 					Name:      "Read",
 					ID:        "toolu_test_001",
@@ -218,8 +223,8 @@ func TestExportSessionTrace_WithTools(t *testing.T) {
 		},
 	}
 
-	ss := &SessionState{}
-	exportSessionTrace(sessionID, turns, nil, nil, ss)
+	ss := &hook.SessionState{}
+	ExportSessionTrace(sessionID, turns, nil, nil, ss)
 
 	spans := exporter.GetSpans()
 
@@ -260,13 +265,13 @@ func TestExportSessionTrace_WithSubagent(t *testing.T) {
 	subStart := now.Add(1 * time.Second)
 	subEnd := now.Add(4 * time.Second)
 
-	turns := []Turn{
+	turns := []hook.Turn{
 		{
 			Number:    1,
 			Model:     "claude-sonnet-4-20250514",
 			StartTime: now,
 			EndTime:   now.Add(6 * time.Second),
-			ToolCalls: []ToolCall{
+			ToolCalls: []hook.ToolCall{
 				{
 					Name:      "Task",
 					ID:        "toolu_task_001",
@@ -278,11 +283,11 @@ func TestExportSessionTrace_WithSubagent(t *testing.T) {
 		},
 	}
 
-	pendingSubagents := []PendingSubagent{
+	pendingSubagents := []hook.PendingSubagent{
 		{
 			AgentID:   "agent-001",
 			AgentType: "general-purpose",
-			Turns: []Turn{
+			Turns: []hook.Turn{
 				{
 					Number:       1,
 					Model:        "claude-sonnet-4-20250514",
@@ -290,7 +295,7 @@ func TestExportSessionTrace_WithSubagent(t *testing.T) {
 					OutputTokens: 10,
 					StartTime:    subStart,
 					EndTime:      subEnd,
-					ToolCalls: []ToolCall{
+					ToolCalls: []hook.ToolCall{
 						{
 							Name:      "Grep",
 							ID:        "toolu_sub_001",
@@ -304,8 +309,8 @@ func TestExportSessionTrace_WithSubagent(t *testing.T) {
 		},
 	}
 
-	ss := &SessionState{}
-	exportSessionTrace(sessionID, turns, nil, pendingSubagents, ss)
+	ss := &hook.SessionState{}
+	ExportSessionTrace(sessionID, turns, nil, pendingSubagents, ss)
 
 	spans := exporter.GetSpans()
 
@@ -332,7 +337,7 @@ func TestExportSessionTrace_IncrementalExport(t *testing.T) {
 	now := time.Now()
 
 	// First export: turn 1
-	turns1 := []Turn{
+	turns1 := []hook.Turn{
 		{
 			Number:    1,
 			Model:     "claude-sonnet-4-20250514",
@@ -341,8 +346,8 @@ func TestExportSessionTrace_IncrementalExport(t *testing.T) {
 		},
 	}
 
-	ss := &SessionState{}
-	exportSessionTrace(sessionID, turns1, nil, nil, ss)
+	ss := &hook.SessionState{}
+	ExportSessionTrace(sessionID, turns1, nil, nil, ss)
 
 	savedSpanID := ss.SessionSpanID
 	if savedSpanID == "" {
@@ -353,7 +358,7 @@ func TestExportSessionTrace_IncrementalExport(t *testing.T) {
 	exporter.Reset()
 
 	// Second export: turn 2 with same session state
-	turns2 := []Turn{
+	turns2 := []hook.Turn{
 		{
 			Number:    2,
 			Model:     "claude-sonnet-4-20250514",
@@ -362,7 +367,7 @@ func TestExportSessionTrace_IncrementalExport(t *testing.T) {
 		},
 	}
 
-	exportSessionTrace(sessionID, turns2, nil, nil, ss)
+	ExportSessionTrace(sessionID, turns2, nil, nil, ss)
 
 	// SessionSpanID should be unchanged
 	if ss.SessionSpanID != savedSpanID {
@@ -384,7 +389,7 @@ func TestExportSessionTrace_SpanAttributes(t *testing.T) {
 	sessionID := "test-session-attributes"
 	now := time.Now()
 
-	turns := []Turn{
+	turns := []hook.Turn{
 		{
 			Number:              1,
 			Model:               "claude-sonnet-4-20250514",
@@ -399,8 +404,8 @@ func TestExportSessionTrace_SpanAttributes(t *testing.T) {
 		},
 	}
 
-	ss := &SessionState{}
-	exportSessionTrace(sessionID, turns, nil, nil, ss)
+	ss := &hook.SessionState{}
+	ExportSessionTrace(sessionID, turns, nil, nil, ss)
 
 	spans := exporter.GetSpans()
 

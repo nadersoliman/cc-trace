@@ -5,16 +5,29 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"cc-trace/internal/hook"
+	"cc-trace/internal/logging"
+	"cc-trace/internal/state"
 )
 
+func fixturePath(t *testing.T, name string) string {
+	t.Helper()
+	p := filepath.Join("..", "..", "testdata", "fixtures", name)
+	if _, err := os.Stat(p); err != nil {
+		t.Fatalf("fixture not found: %s", p)
+	}
+	return p
+}
+
 // loadFixtureInput reads a JSON fixture file and unmarshals it into a HookInput.
-func loadFixtureInput(t *testing.T, name string) HookInput {
+func loadFixtureInput(t *testing.T, name string) hook.HookInput {
 	t.Helper()
 	data, err := os.ReadFile(fixturePath(t, name))
 	if err != nil {
 		t.Fatalf("read fixture %s: %v", name, err)
 	}
-	var input HookInput
+	var input hook.HookInput
 	if err := json.Unmarshal(data, &input); err != nil {
 		t.Fatalf("unmarshal fixture %s: %v", name, err)
 	}
@@ -36,6 +49,23 @@ func copyFixtureToDir(t *testing.T, fixtureName, dir string) string {
 	return dst
 }
 
+func setupTestStateDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	state.Init(dir)
+	// Create the state directory so lock/state files can be written.
+	stateDir := filepath.Join(dir, ".claude", "state")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
+	// Initialise logging so Debug calls don't fail.
+	logFile := filepath.Join(dir, "test.log")
+	logging.Init(logFile, false)
+	// Prevent dump calls during tests.
+	dumpEnabled = false
+	return dir
+}
+
 // --- Integration Tests ---
 
 func TestHandlePostToolUse_Integration(t *testing.T) {
@@ -44,7 +74,7 @@ func TestHandlePostToolUse_Integration(t *testing.T) {
 	input := loadFixtureInput(t, "posttooluse_taskupdate.json")
 	handlePostToolUse(input)
 
-	sf := loadState()
+	sf := state.LoadState()
 	ss, ok := sf.Sessions[input.SessionID]
 	if !ok {
 		t.Fatalf("session %q not found in state after handlePostToolUse", input.SessionID)
@@ -66,7 +96,7 @@ func TestHandlePostToolUse_Read(t *testing.T) {
 	input := loadFixtureInput(t, "posttooluse_read.json")
 	handlePostToolUse(input)
 
-	sf := loadState()
+	sf := state.LoadState()
 	ss, ok := sf.Sessions[input.SessionID]
 	if !ok {
 		t.Fatalf("session %q not found in state after handlePostToolUse", input.SessionID)
@@ -86,7 +116,7 @@ func TestHandlePostToolUse_Failure(t *testing.T) {
 	// PostToolUseFailure routes through handlePostToolUse in main.go's switch.
 	handlePostToolUse(input)
 
-	sf := loadState()
+	sf := state.LoadState()
 	ss, ok := sf.Sessions[input.SessionID]
 	if !ok {
 		t.Fatalf("session %q not found in state after handlePostToolUse (failure)", input.SessionID)
@@ -111,7 +141,7 @@ func TestHandleSubagentStop_Integration(t *testing.T) {
 
 	handleSubagentStop(input)
 
-	sf := loadState()
+	sf := state.LoadState()
 	ss, ok := sf.Sessions[input.SessionID]
 	if !ok {
 		t.Fatalf("session %q not found in state after handleSubagentStop", input.SessionID)
@@ -144,7 +174,7 @@ func TestHandleStop_Integration(t *testing.T) {
 	handleStop(input)
 
 	// Verify state side effects: TurnCount and LastLine updated.
-	sf := loadState()
+	sf := state.LoadState()
 	ss, ok := sf.Sessions[input.SessionID]
 	if !ok {
 		t.Fatalf("session %q not found in state after handleStop", input.SessionID)
@@ -169,7 +199,7 @@ func TestFullFlow(t *testing.T) {
 	handlePostToolUse(readInput)
 
 	// Verify tool was recorded.
-	sf := loadState()
+	sf := state.LoadState()
 	ss, ok := sf.Sessions[sessionID]
 	if !ok {
 		t.Fatalf("session %q not found after PostToolUse", sessionID)
@@ -186,14 +216,14 @@ func TestFullFlow(t *testing.T) {
 	handleSubagentStop(subagentInput)
 
 	// Verify subagent was recorded.
-	sf = loadState()
+	sf = state.LoadState()
 	ss = sf.Sessions[sessionID]
 	if len(ss.PendingSubagents) != 1 {
 		t.Fatalf("expected 1 PendingSubagent after SubagentStop, got %d", len(ss.PendingSubagents))
 	}
 
-	// Step 3: handleStop — use setupTestTracer so we can inspect exported spans.
-	// Note: handleStop calls initTracer() internally which overrides the global
+	// Step 3: handleStop -- use setupTestTracer so we can inspect exported spans.
+	// Note: handleStop calls tracer.InitTracer() internally which overrides the global
 	// TracerProvider. To capture spans, we set OTEL_EXPORTER_OTLP_ENDPOINT to
 	// an unreachable port and verify state side effects instead.
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:1")
@@ -204,7 +234,7 @@ func TestFullFlow(t *testing.T) {
 	handleStop(stopInput)
 
 	// Verify state side effects after Stop.
-	sf = loadState()
+	sf = state.LoadState()
 	ss, ok = sf.Sessions[sessionID]
 	if !ok {
 		t.Fatalf("session %q not found after Stop", sessionID)

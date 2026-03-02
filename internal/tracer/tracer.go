@@ -1,4 +1,4 @@
-package main
+package tracer
 
 import (
 	"context"
@@ -9,6 +9,9 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"cc-trace/internal/hook"
+	"cc-trace/internal/logging"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -27,13 +30,13 @@ func traceIDFromSession(sessionID string) trace.TraceID {
 	return tid
 }
 
-// initTracer sets up the OTel TracerProvider with OTLP HTTP exporter.
+// InitTracer sets up the OTel TracerProvider with OTLP HTTP exporter.
 //
 // All configuration is read from standard OTel environment variables:
 //   - OTEL_EXPORTER_OTLP_ENDPOINT (default: http://localhost:4318)
 //   - OTEL_SERVICE_NAME (default: unknown_service)
 //   - OTEL_RESOURCE_ATTRIBUTES (default: none)
-func initTracer() (func(), error) {
+func InitTracer() (func(), error) {
 	ctx := context.Background()
 
 	exporter, err := otlptracehttp.New(ctx,
@@ -44,12 +47,12 @@ func initTracer() (func(), error) {
 		return nil, fmt.Errorf("create exporter: %w", err)
 	}
 
-	return initTracerWithExporter(exporter)
+	return InitTracerWithExporter(exporter)
 }
 
-// initTracerWithExporter sets up the OTel TracerProvider with the given exporter.
+// InitTracerWithExporter sets up the OTel TracerProvider with the given exporter.
 // This allows tests to inject an in-memory exporter instead of a real OTLP one.
-func initTracerWithExporter(exporter sdktrace.SpanExporter) (func(), error) {
+func InitTracerWithExporter(exporter sdktrace.SpanExporter) (func(), error) {
 	ctx := context.Background()
 
 	res, err := resource.New(ctx,
@@ -76,12 +79,12 @@ func initTracerWithExporter(exporter sdktrace.SpanExporter) (func(), error) {
 	return shutdown, nil
 }
 
-// exportSessionTrace creates all spans for a session and exports them.
-func exportSessionTrace(sessionID string, turns []Turn, toolSpanData []ToolSpanData, pendingSubagents []PendingSubagent, ss *SessionState) {
+// ExportSessionTrace creates all spans for a session and exports them.
+func ExportSessionTrace(sessionID string, turns []hook.Turn, toolSpanData []hook.ToolSpanData, pendingSubagents []hook.PendingSubagent, ss *hook.SessionState) {
 	tracer := otel.Tracer("cc-trace")
 
 	if len(turns) == 0 {
-		debugLog("No turns to export")
+		logging.Debug("No turns to export")
 		return
 	}
 
@@ -96,7 +99,7 @@ func exportSessionTrace(sessionID string, turns []Turn, toolSpanData []ToolSpanD
 	var baseCtx context.Context
 	if parentCtx, ok := parseTraceparent(); ok {
 		baseCtx = parentCtx
-		debugLog("Using TRACEPARENT from environment for parent context")
+		logging.Debug("Using TRACEPARENT from environment for parent context")
 	} else {
 		tid := traceIDFromSession(sessionID)
 		baseCtx = contextWithTraceID(tid)
@@ -117,12 +120,12 @@ func exportSessionTrace(sessionID string, turns []Turn, toolSpanData []ToolSpanD
 		)
 		ss.SessionSpanID = sessionSpan.SpanContext().SpanID().String()
 		ss.SessionStart = sessionStart
-		debugLog(fmt.Sprintf("Created Session span %s for session %s", ss.SessionSpanID, truncate(sessionID, 12)))
+		logging.Debug(fmt.Sprintf("Created Session span %s for session %s", ss.SessionSpanID, truncate(sessionID, 12)))
 	} else {
 		traceID := trace.SpanContextFromContext(baseCtx).TraceID()
 		sidBytes, err := hex.DecodeString(ss.SessionSpanID)
 		if err != nil || len(sidBytes) != 8 {
-			logMsg("ERROR", fmt.Sprintf("Invalid stored SessionSpanID: %s", ss.SessionSpanID))
+			logging.Log("ERROR", fmt.Sprintf("Invalid stored SessionSpanID: %s", ss.SessionSpanID))
 			return
 		}
 		var sid trace.SpanID
@@ -134,7 +137,7 @@ func exportSessionTrace(sessionID string, turns []Turn, toolSpanData []ToolSpanD
 			Remote:     true,
 		})
 		sessionCtx = trace.ContextWithRemoteSpanContext(context.Background(), sc)
-		debugLog(fmt.Sprintf("Reusing Session span %s for session %s", ss.SessionSpanID, truncate(sessionID, 12)))
+		logging.Debug(fmt.Sprintf("Reusing Session span %s for session %s", ss.SessionSpanID, truncate(sessionID, 12)))
 	}
 
 	// Create turn spans as children of session.
@@ -225,11 +228,11 @@ func exportSessionTrace(sessionID string, turns []Turn, toolSpanData []ToolSpanD
 	if sessionSpan != nil {
 		sessionSpan.End(trace.WithTimestamp(sessionEnd))
 	}
-	debugLog(fmt.Sprintf("Exported %d turns for session %s", len(turns), truncate(sessionID, 12)))
+	logging.Debug(fmt.Sprintf("Exported %d turns for session %s", len(turns), truncate(sessionID, 12)))
 }
 
 // matchSubagent finds a pending subagent whose execution window overlaps the Task tool call.
-func matchSubagent(pending []PendingSubagent, matched []bool, tc ToolCall) (*PendingSubagent, int) {
+func matchSubagent(pending []hook.PendingSubagent, matched []bool, tc hook.ToolCall) (*hook.PendingSubagent, int) {
 	for i, sub := range pending {
 		if matched[i] || len(sub.Turns) == 0 {
 			continue
@@ -245,7 +248,7 @@ func matchSubagent(pending []PendingSubagent, matched []bool, tc ToolCall) (*Pen
 }
 
 // emitSubagentSpans creates child spans for a subagent under the Task tool span.
-func emitSubagentSpans(tracer trace.Tracer, taskSpan trace.Span, turnCtx context.Context, sub PendingSubagent) {
+func emitSubagentSpans(tracer trace.Tracer, taskSpan trace.Span, turnCtx context.Context, sub hook.PendingSubagent) {
 	taskCtx := trace.ContextWithSpan(turnCtx, taskSpan)
 
 	subStart := sub.Turns[0].StartTime
@@ -317,7 +320,7 @@ func emitSubagentSpans(tracer trace.Tracer, taskSpan trace.Span, turnCtx context
 	}
 
 	subSpan.End(trace.WithTimestamp(subEnd))
-	debugLog(fmt.Sprintf("Emitted subagent %s (%s) with %d turns", sub.AgentType, sub.AgentID, len(sub.Turns)))
+	logging.Debug(fmt.Sprintf("Emitted subagent %s (%s) with %d turns", sub.AgentType, sub.AgentID, len(sub.Turns)))
 }
 
 // parseTraceparent reads TRACEPARENT from the environment and returns a context
@@ -331,19 +334,19 @@ func parseTraceparent() (context.Context, bool) {
 
 	parts := strings.Split(tp, "-")
 	if len(parts) != 4 || parts[0] != "00" {
-		debugLog(fmt.Sprintf("Invalid TRACEPARENT format: %s", tp))
+		logging.Debug(fmt.Sprintf("Invalid TRACEPARENT format: %s", tp))
 		return nil, false
 	}
 
 	tidBytes, err := hex.DecodeString(parts[1])
 	if err != nil || len(tidBytes) != 16 {
-		debugLog(fmt.Sprintf("Invalid TRACEPARENT trace_id: %s", parts[1]))
+		logging.Debug(fmt.Sprintf("Invalid TRACEPARENT trace_id: %s", parts[1]))
 		return nil, false
 	}
 
 	sidBytes, err := hex.DecodeString(parts[2])
 	if err != nil || len(sidBytes) != 8 {
-		debugLog(fmt.Sprintf("Invalid TRACEPARENT span_id: %s", parts[2]))
+		logging.Debug(fmt.Sprintf("Invalid TRACEPARENT span_id: %s", parts[2]))
 		return nil, false
 	}
 

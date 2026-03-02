@@ -1,4 +1,4 @@
-package main
+package state
 
 import (
 	"encoding/json"
@@ -6,26 +6,41 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"cc-trace/internal/hook"
+	"cc-trace/internal/logging"
 )
 
 func setupTestStateDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	initStatePaths(dir)
+	Init(dir)
 	// Create the state directory so lock/state files can be written.
 	stateDir := filepath.Join(dir, ".claude", "state")
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatalf("failed to create state dir: %v", err)
 	}
+	// Initialise logging so Debug calls in state.go don't fail.
+	logFile := filepath.Join(dir, "test.log")
+	logging.Init(logFile, false)
 	return dir
+}
+
+func fixturePath(t *testing.T, name string) string {
+	t.Helper()
+	p := filepath.Join("..", "..", "testdata", "fixtures", name)
+	if _, err := os.Stat(p); err != nil {
+		t.Fatalf("fixture not found: %s", p)
+	}
+	return p
 }
 
 func TestLoadState_Empty(t *testing.T) {
 	setupTestStateDir(t)
 
-	sf := loadState()
+	sf := LoadState()
 	if sf == nil {
-		t.Fatal("loadState returned nil")
+		t.Fatal("LoadState returned nil")
 	}
 	if sf.Sessions == nil {
 		t.Fatal("Sessions map is nil")
@@ -47,9 +62,9 @@ func TestLoadState_Corrupt(t *testing.T) {
 		t.Fatalf("failed to write corrupt state file: %v", err)
 	}
 
-	sf := loadState()
+	sf := LoadState()
 	if sf == nil {
-		t.Fatal("loadState returned nil on corrupt file")
+		t.Fatal("LoadState returned nil on corrupt file")
 	}
 	if sf.Sessions == nil {
 		t.Fatal("Sessions map is nil on corrupt file")
@@ -63,8 +78,8 @@ func TestSaveAndLoad(t *testing.T) {
 	setupTestStateDir(t)
 
 	now := time.Now()
-	sf := &StateFile{
-		Sessions: map[string]*SessionState{
+	sf := &hook.StateFile{
+		Sessions: map[string]*hook.SessionState{
 			"test-session-1": {
 				TranscriptPath: "/tmp/test.jsonl",
 				CWD:            "/tmp",
@@ -75,13 +90,13 @@ func TestSaveAndLoad(t *testing.T) {
 		},
 	}
 
-	if err := saveState(sf); err != nil {
-		t.Fatalf("saveState failed: %v", err)
+	if err := SaveState(sf); err != nil {
+		t.Fatalf("SaveState failed: %v", err)
 	}
 
-	loaded := loadState()
+	loaded := LoadState()
 	if loaded == nil {
-		t.Fatal("loadState returned nil")
+		t.Fatal("LoadState returned nil")
 	}
 
 	ss, ok := loaded.Sessions["test-session-1"]
@@ -100,8 +115,8 @@ func TestSaveState_PrunesStale(t *testing.T) {
 	setupTestStateDir(t)
 
 	now := time.Now()
-	sf := &StateFile{
-		Sessions: map[string]*SessionState{
+	sf := &hook.StateFile{
+		Sessions: map[string]*hook.SessionState{
 			"fresh-session": {
 				TranscriptPath: "/tmp/fresh.jsonl",
 				CWD:            "/tmp",
@@ -119,13 +134,13 @@ func TestSaveState_PrunesStale(t *testing.T) {
 		},
 	}
 
-	if err := saveState(sf); err != nil {
-		t.Fatalf("saveState failed: %v", err)
+	if err := SaveState(sf); err != nil {
+		t.Fatalf("SaveState failed: %v", err)
 	}
 
-	loaded := loadState()
+	loaded := LoadState()
 	if loaded == nil {
-		t.Fatal("loadState returned nil")
+		t.Fatal("LoadState returned nil")
 	}
 
 	if _, ok := loaded.Sessions["fresh-session"]; !ok {
@@ -140,14 +155,14 @@ func TestSaveAndLoad_WithToolSpans(t *testing.T) {
 	setupTestStateDir(t)
 
 	now := time.Now()
-	sf := &StateFile{
-		Sessions: map[string]*SessionState{
+	sf := &hook.StateFile{
+		Sessions: map[string]*hook.SessionState{
 			"tool-session": {
 				TranscriptPath: "/tmp/tools.jsonl",
 				CWD:            "/tmp",
 				LastLine:       10,
 				TurnCount:      1,
-				ToolSpans: []ToolSpanData{
+				ToolSpans: []hook.ToolSpanData{
 					{
 						ToolName:  "Read",
 						ToolUseID: "toolu_test_001",
@@ -162,13 +177,13 @@ func TestSaveAndLoad_WithToolSpans(t *testing.T) {
 		},
 	}
 
-	if err := saveState(sf); err != nil {
-		t.Fatalf("saveState failed: %v", err)
+	if err := SaveState(sf); err != nil {
+		t.Fatalf("SaveState failed: %v", err)
 	}
 
-	loaded := loadState()
+	loaded := LoadState()
 	if loaded == nil {
-		t.Fatal("loadState returned nil")
+		t.Fatal("LoadState returned nil")
 	}
 
 	ss, ok := loaded.Sessions["tool-session"]
@@ -190,22 +205,22 @@ func TestLocking(t *testing.T) {
 	setupTestStateDir(t)
 
 	// First acquire should succeed.
-	if !acquireLock() {
-		t.Fatal("first acquireLock should return true")
+	if !AcquireLock() {
+		t.Fatal("first AcquireLock should return true")
 	}
 
 	// Second acquire while held should fail.
-	if acquireLock() {
-		t.Fatal("second acquireLock should return false (lock held)")
+	if AcquireLock() {
+		t.Fatal("second AcquireLock should return false (lock held)")
 	}
 
 	// Release and re-acquire should succeed.
-	releaseLock()
+	ReleaseLock()
 
-	if !acquireLock() {
-		t.Fatal("acquireLock after releaseLock should return true")
+	if !AcquireLock() {
+		t.Fatal("AcquireLock after ReleaseLock should return true")
 	}
-	releaseLock()
+	ReleaseLock()
 }
 
 func TestStaleLockRemoval(t *testing.T) {
@@ -231,11 +246,11 @@ func TestStaleLockRemoval(t *testing.T) {
 		t.Fatalf("failed to set lock file mtime: %v", err)
 	}
 
-	// acquireLock should succeed because the stale lock is removed.
-	if !acquireLock() {
-		t.Fatal("acquireLock should return true after removing stale lock")
+	// AcquireLock should succeed because the stale lock is removed.
+	if !AcquireLock() {
+		t.Fatal("AcquireLock should return true after removing stale lock")
 	}
-	releaseLock()
+	ReleaseLock()
 }
 
 func TestLoadState_FromFixture(t *testing.T) {
@@ -246,7 +261,7 @@ func TestLoadState_FromFixture(t *testing.T) {
 		t.Fatalf("failed to read fixture: %v", err)
 	}
 
-	var sf StateFile
+	var sf hook.StateFile
 	if err := json.Unmarshal(data, &sf); err != nil {
 		t.Fatalf("failed to unmarshal fixture: %v", err)
 	}

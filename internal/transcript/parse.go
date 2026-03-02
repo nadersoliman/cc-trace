@@ -1,4 +1,4 @@
-package main
+package transcript
 
 import (
 	"encoding/json"
@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"cc-trace/internal/hook"
 )
 
 // msgRole returns "user", "assistant", or other type from a transcript line.
@@ -104,8 +106,8 @@ func isToolResult(msg map[string]interface{}) bool {
 	return false
 }
 
-// mergeAssistantParts combines multiple streamed assistant message parts into one.
-func mergeAssistantParts(parts []map[string]interface{}) map[string]interface{} {
+// MergeAssistantParts combines multiple streamed assistant message parts into one.
+func MergeAssistantParts(parts []map[string]interface{}) map[string]interface{} {
 	if len(parts) == 0 {
 		return nil
 	}
@@ -210,8 +212,8 @@ func extractUsage(msg map[string]interface{}) (input, output, cacheRead, cacheCr
 	return
 }
 
-// parseTranscript reads a JSONL transcript from startLine and returns parsed turns.
-func parseTranscript(transcriptPath string, startLine int) ([]Turn, int, error) {
+// ParseTranscript reads a JSONL transcript from startLine and returns parsed turns.
+func ParseTranscript(transcriptPath string, startLine int) ([]hook.Turn, int, error) {
 	data, err := os.ReadFile(transcriptPath)
 	if err != nil {
 		return nil, startLine, fmt.Errorf("read transcript: %w", err)
@@ -239,7 +241,7 @@ func parseTranscript(transcriptPath string, startLine int) ([]Turn, int, error) 
 		return nil, totalLines, nil
 	}
 
-	var turns []Turn
+	var turns []hook.Turn
 	var currentUser map[string]interface{}
 	var currentAssistants []map[string]interface{}
 	var currentAssistantParts []map[string]interface{}
@@ -249,7 +251,7 @@ func parseTranscript(transcriptPath string, startLine int) ([]Turn, int, error) 
 
 	finalizeParts := func() {
 		if currentMsgID != "" && len(currentAssistantParts) > 0 {
-			merged := mergeAssistantParts(currentAssistantParts)
+			merged := MergeAssistantParts(currentAssistantParts)
 			if merged != nil {
 				currentAssistants = append(currentAssistants, merged)
 			}
@@ -284,14 +286,14 @@ func parseTranscript(transcriptPath string, startLine int) ([]Turn, int, error) 
 			cacheCreationTok += cc
 		}
 
-		var toolCalls []ToolCall
+		var toolCalls []hook.ToolCall
 		for _, am := range currentAssistants {
 			amTS := extractTimestamp(am)
 			calls := getToolCalls(am)
 			for _, tc := range calls {
 				name, _ := tc["name"].(string)
 				id, _ := tc["id"].(string)
-				tcall := ToolCall{
+				tcall := hook.ToolCall{
 					Name:      name,
 					ID:        id,
 					Input:     tc["input"],
@@ -330,7 +332,7 @@ func parseTranscript(transcriptPath string, startLine int) ([]Turn, int, error) 
 			}
 		}
 
-		turns = append(turns, Turn{
+		turns = append(turns, hook.Turn{
 			Number:              turnNum,
 			UserText:            userText,
 			UserTimestamp:       userTS,
@@ -393,7 +395,7 @@ func parseTranscript(transcriptPath string, startLine int) ([]Turn, int, error) 
 	finalizeTurn(turnNum)
 
 	// Remove empty first turn if the first message wasn't a user turn.
-	var filtered []Turn
+	var filtered []hook.Turn
 	for _, t := range turns {
 		if t.Number > 0 {
 			filtered = append(filtered, t)

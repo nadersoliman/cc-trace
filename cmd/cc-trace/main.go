@@ -30,7 +30,9 @@ func main() {
 	logFilePath := filepath.Join(homeDir, ".claude", "state", "otel_trace_hook.log")
 	debugEnabled := strings.EqualFold(os.Getenv("CC_OTEL_TRACE_DEBUG"), "true")
 	dumpEnabled = strings.EqualFold(os.Getenv("CC_OTEL_TRACE_DUMP"), "true")
+	timingEnabled := strings.EqualFold(os.Getenv("CC_OTEL_TRACE_TIMING"), "true")
 	logging.Init(logFilePath, debugEnabled)
+	logging.InitTiming(timingEnabled)
 	state.Init(homeDir)
 
 	defer func() {
@@ -122,18 +124,25 @@ func dumpTranscript(transcriptPath, sessionID string) {
 }
 
 func handlePostToolUse(input hook.HookInput) {
+	start := time.Now()
+
 	if input.SessionID == "" {
 		logging.Debug("No session_id in PostToolUse, skipping")
 		return
 	}
 
+	lockStart := time.Now()
 	if !state.AcquireLock() {
 		logging.Debug("Lock held, skipping PostToolUse")
 		return
 	}
 	defer state.ReleaseLock()
+	lockDur := time.Since(lockStart)
 
+	loadStart := time.Now()
 	sf := state.LoadState()
+	loadDur := time.Since(loadStart)
+
 	ss, ok := sf.Sessions[input.SessionID]
 	if !ok {
 		ss = &hook.SessionState{
@@ -152,29 +161,41 @@ func handlePostToolUse(input hook.HookInput) {
 	})
 	ss.Updated = time.Now()
 
+	saveStart := time.Now()
 	if err := state.SaveState(sf); err != nil {
 		logging.Log("ERROR", fmt.Sprintf("Failed to save state: %v", err))
 	}
+	saveDur := time.Since(saveStart)
 
 	logging.Debug(fmt.Sprintf("Recorded tool: %s (%s)", input.ToolName, input.ToolUseID))
+
+	sid := input.SessionID
+	if len(sid) > 8 {
+		sid = sid[:8]
+	}
+	logging.Timing(fmt.Sprintf("total=%dms PostToolUse session=%s tool=%s lock=%dms load=%dms save=%dms",
+		time.Since(start).Milliseconds(), sid, input.ToolName,
+		lockDur.Milliseconds(), loadDur.Milliseconds(), saveDur.Milliseconds()))
 }
 
 func handleStop(input hook.HookInput) {
 	start := time.Now()
 
-	// Find transcript path from input or state.
 	transcriptPath := input.TranscriptPath
 	sessionID := input.SessionID
 
+	lockStart := time.Now()
 	if !state.AcquireLock() {
 		logging.Debug("Lock held, skipping Stop")
 		return
 	}
 	defer state.ReleaseLock()
+	lockDur := time.Since(lockStart)
 
+	loadStart := time.Now()
 	sf := state.LoadState()
+	loadDur := time.Since(loadStart)
 
-	// Fall back to state for session info.
 	ss, ok := sf.Sessions[sessionID]
 	if !ok {
 		ss = &hook.SessionState{}
@@ -192,8 +213,10 @@ func handleStop(input hook.HookInput) {
 		dumpTranscript(transcriptPath, sessionID)
 	}
 
-	// Parse transcript.
+	parseStart := time.Now()
 	turns, totalLines, err := transcript.ParseTranscript(transcriptPath, ss.LastLine)
+	parseDur := time.Since(parseStart)
+
 	if err != nil {
 		logging.Log("ERROR", fmt.Sprintf("Failed to parse transcript: %v", err))
 		return
@@ -207,53 +230,74 @@ func handleStop(input hook.HookInput) {
 		return
 	}
 
-	// Renumber turns based on previous count.
 	for i := range turns {
 		turns[i].Number = ss.TurnCount + i + 1
 	}
 
-	// Init OTel and export.
+	initStart := time.Now()
 	shutdown, err := tracer.InitTracer()
+	initDur := time.Since(initStart)
+
 	if err != nil {
 		logging.Log("ERROR", fmt.Sprintf("Failed to init tracer: %v", err))
 		return
 	}
-	defer shutdown()
 
+	exportStart := time.Now()
 	tracer.ExportSessionTrace(sessionID, turns, ss.ToolSpans, ss.PendingSubagents, ss)
+	exportDur := time.Since(exportStart)
 
-	// Update state.
+	shutdownStart := time.Now()
+	shutdown()
+	shutdownDur := time.Since(shutdownStart)
+
 	ss.LastLine = totalLines
 	ss.TurnCount += len(turns)
-	ss.ToolSpans = nil        // Clear after export.
-	ss.PendingSubagents = nil // Clear after export.
+	ss.ToolSpans = nil
+	ss.PendingSubagents = nil
 	ss.Updated = time.Now()
 
+	saveStart := time.Now()
 	if err := state.SaveState(sf); err != nil {
 		logging.Log("ERROR", fmt.Sprintf("Failed to save state: %v", err))
 	}
+	saveDur := time.Since(saveStart)
 
-	duration := time.Since(start).Seconds()
-	logging.Log("INFO", fmt.Sprintf("Exported %d turns in %.1fs", len(turns), duration))
+	sid := sessionID
+	if len(sid) > 8 {
+		sid = sid[:8]
+	}
+	logging.Log("INFO", fmt.Sprintf("Exported %d turns in %.1fs", len(turns), time.Since(start).Seconds()))
+	logging.Timing(fmt.Sprintf("total=%dms Stop session=%s lock=%dms load=%dms parse=%dms tracer_init=%dms export=%dms shutdown=%dms save=%dms turns=%d",
+		time.Since(start).Milliseconds(), sid,
+		lockDur.Milliseconds(), loadDur.Milliseconds(), parseDur.Milliseconds(),
+		initDur.Milliseconds(), exportDur.Milliseconds(), shutdownDur.Milliseconds(),
+		saveDur.Milliseconds(), len(turns)))
 }
 
 func handleSubagentStop(input hook.HookInput) {
+	start := time.Now()
+
 	if input.SessionID == "" || input.AgentTranscriptPath == "" {
 		logging.Debug("No session_id or agent_transcript_path in SubagentStop, skipping")
 		return
 	}
 
-	// Retry transcript read -- file may not be flushed yet when SubagentStop fires.
+	parseStart := time.Now()
 	var turns []hook.Turn
 	var err error
+	retries := 0
 	for attempt := 0; attempt < 3; attempt++ {
 		turns, _, err = transcript.ParseTranscript(input.AgentTranscriptPath, 0)
 		if err == nil {
 			break
 		}
+		retries = attempt + 1
 		logging.Debug(fmt.Sprintf("Transcript not ready (attempt %d): %v", attempt+1, err))
 		time.Sleep(200 * time.Millisecond)
 	}
+	parseDur := time.Since(parseStart)
+
 	if err != nil {
 		logging.Debug(fmt.Sprintf("Subagent transcript unavailable, skipping: %v", err))
 		return
@@ -263,13 +307,18 @@ func handleSubagentStop(input hook.HookInput) {
 		return
 	}
 
+	lockStart := time.Now()
 	if !state.AcquireLock() {
 		logging.Debug("Lock held, skipping SubagentStop")
 		return
 	}
 	defer state.ReleaseLock()
+	lockDur := time.Since(lockStart)
 
+	loadStart := time.Now()
 	sf := state.LoadState()
+	loadDur := time.Since(loadStart)
+
 	ss, ok := sf.Sessions[input.SessionID]
 	if !ok {
 		ss = &hook.SessionState{
@@ -286,9 +335,19 @@ func handleSubagentStop(input hook.HookInput) {
 	})
 	ss.Updated = time.Now()
 
+	saveStart := time.Now()
 	if err := state.SaveState(sf); err != nil {
 		logging.Log("ERROR", fmt.Sprintf("Failed to save state: %v", err))
 	}
+	saveDur := time.Since(saveStart)
 
 	logging.Debug(fmt.Sprintf("Stored subagent %s (%s) with %d turns", input.AgentType, input.AgentID, len(turns)))
+
+	sid := input.SessionID
+	if len(sid) > 8 {
+		sid = sid[:8]
+	}
+	logging.Timing(fmt.Sprintf("total=%dms SubagentStop session=%s agent=%s parse=%dms retries=%d lock=%dms load=%dms save=%dms",
+		time.Since(start).Milliseconds(), sid, input.AgentType,
+		parseDur.Milliseconds(), retries, lockDur.Milliseconds(), loadDur.Milliseconds(), saveDur.Milliseconds()))
 }

@@ -40,13 +40,14 @@ Session Root
 
 ## Files
 
-| File | Purpose |
+| Path | Purpose |
 |------|---------|
-| `main.go` | Entry point, stdin parsing, event dispatch |
-| `types.go` | Data structures (HookInput, Turn, ToolCall, SessionState) |
-| `state.go` | State file load/save with file locking |
-| `transcript.go` | JSONL transcript parsing into turns |
-| `tracer.go` | OTel SDK init, span creation, deterministic trace IDs |
+| `cmd/cc-trace/main.go` | Entry point, stdin parsing, event dispatch |
+| `internal/hook/types.go` | Data structures (HookInput, Turn, ToolCall, SessionState) |
+| `internal/logging/logging.go` | Debug and error logging to file |
+| `internal/state/state.go` | State file load/save with file locking |
+| `internal/transcript/parse.go` | JSONL transcript parsing into turns |
+| `internal/tracer/tracer.go` | OTel SDK init, span creation, deterministic trace IDs |
 
 ## Environment Variables
 

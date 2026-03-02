@@ -59,6 +59,7 @@ All configuration follows the [OTel environment variable specification](https://
 | `OTEL_SERVICE_NAME` | `unknown_service` | `service.name` resource attribute |
 | `OTEL_RESOURCE_ATTRIBUTES` | (none) | Comma-separated `key=value` pairs added to the trace resource (e.g., `project.name=k8s-lab`) |
 | `CC_OTEL_TRACE_DEBUG` | `false` | Debug logging to `~/.claude/state/otel_trace_hook.log` |
+| `CC_OTEL_TRACE_TIMING` | `false` | Phase-level timing logs to `~/.claude/state/otel_trace_hook.log` (format: `total=Nms EventName session=... phase=Nms ...`) |
 | `CC_OTEL_TRACE_DUMP` | `false` | Dump raw hook payloads and transcripts to `/tmp/cc-trace/dumps/` for investigation |
 
 **Note:** The hook previously used gRPC (`otlptracegrpc`, port 4317) with a separate `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`. It now uses HTTP/protobuf (`otlptracehttp`) to share the same `OTEL_EXPORTER_OTLP_ENDPOINT` as Claude Code's metrics and logs. Per the OTel spec, the HTTP exporter appends `/v1/traces` to the base endpoint automatically.

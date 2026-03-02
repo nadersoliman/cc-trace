@@ -8,65 +8,48 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"cc-trace/internal/hook"
+	"cc-trace/internal/logging"
+	"cc-trace/internal/state"
+	"cc-trace/internal/tracer"
+	"cc-trace/internal/transcript"
 )
 
 var (
-	homeDir      string
-	logFilePath  string
-	debugEnabled bool
-	dumpEnabled  bool
-	dumpDir      = "/tmp/cc-trace/dumps"
+	dumpEnabled bool
+	dumpDir     = "/tmp/cc-trace/dumps"
 )
 
-func init() {
-	var err error
-	homeDir, err = os.UserHomeDir()
+func main() {
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cannot determine home directory: %v\n", err)
 		os.Exit(0)
 	}
-	logFilePath = filepath.Join(homeDir, ".claude", "state", "otel_trace_hook.log")
-	debugEnabled = strings.EqualFold(os.Getenv("CC_OTEL_TRACE_DEBUG"), "true")
+	logFilePath := filepath.Join(homeDir, ".claude", "state", "otel_trace_hook.log")
+	debugEnabled := strings.EqualFold(os.Getenv("CC_OTEL_TRACE_DEBUG"), "true")
 	dumpEnabled = strings.EqualFold(os.Getenv("CC_OTEL_TRACE_DUMP"), "true")
-	initStatePaths(homeDir)
-}
+	logging.Init(logFilePath, debugEnabled)
+	state.Init(homeDir)
 
-func logMsg(level, message string) {
-	dir := filepath.Dir(logFilePath)
-	_ = os.MkdirAll(dir, 0o755)
-	f, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	ts := time.Now().Format("2006-01-02 15:04:05")
-	fmt.Fprintf(f, "%s [%s] %s\n", ts, level, message)
-}
-
-func debugLog(message string) {
-	if debugEnabled {
-		logMsg("DEBUG", message)
-	}
-}
-
-func main() {
 	defer func() {
 		if r := recover(); r != nil {
-			logMsg("ERROR", fmt.Sprintf("Panic: %v", r))
+			logging.Log("ERROR", fmt.Sprintf("Panic: %v", r))
 		}
 	}()
 
-	debugLog("Hook started")
+	logging.Debug("Hook started")
 
 	data, err := io.ReadAll(os.Stdin)
 	if err != nil {
-		logMsg("ERROR", fmt.Sprintf("Failed to read stdin: %v", err))
+		logging.Log("ERROR", fmt.Sprintf("Failed to read stdin: %v", err))
 		os.Exit(0)
 	}
 
-	var input HookInput
+	var input hook.HookInput
 	if err := json.Unmarshal(data, &input); err != nil {
-		logMsg("ERROR", fmt.Sprintf("Failed to parse stdin: %v", err))
+		logging.Log("ERROR", fmt.Sprintf("Failed to parse stdin: %v", err))
 		os.Exit(0)
 	}
 
@@ -74,7 +57,7 @@ func main() {
 		dumpPayload(input.HookEventName, input.SessionID, data)
 	}
 
-	debugLog(fmt.Sprintf("Event: %s, Session: %s", input.HookEventName, input.SessionID))
+	logging.Debug(fmt.Sprintf("Event: %s, Session: %s", input.HookEventName, input.SessionID))
 
 	switch input.HookEventName {
 	case "PostToolUse", "PostToolUseFailure":
@@ -84,7 +67,7 @@ func main() {
 	case "Stop":
 		handleStop(input)
 	default:
-		debugLog(fmt.Sprintf("Unknown event: %s", input.HookEventName))
+		logging.Debug(fmt.Sprintf("Unknown event: %s", input.HookEventName))
 	}
 }
 
@@ -107,9 +90,9 @@ func dumpPayload(event, sessionID string, raw []byte) {
 	}
 
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
-		debugLog(fmt.Sprintf("Failed to dump payload: %v", err))
+		logging.Debug(fmt.Sprintf("Failed to dump payload: %v", err))
 	} else {
-		debugLog(fmt.Sprintf("Dumped %s payload to %s", event, path))
+		logging.Debug(fmt.Sprintf("Dumped %s payload to %s", event, path))
 	}
 }
 
@@ -128,39 +111,39 @@ func dumpTranscript(transcriptPath, sessionID string) {
 
 	data, err := os.ReadFile(transcriptPath)
 	if err != nil {
-		debugLog(fmt.Sprintf("Failed to read transcript for dump: %v", err))
+		logging.Debug(fmt.Sprintf("Failed to read transcript for dump: %v", err))
 		return
 	}
 	if err := os.WriteFile(destPath, data, 0o644); err != nil {
-		debugLog(fmt.Sprintf("Failed to dump transcript: %v", err))
+		logging.Debug(fmt.Sprintf("Failed to dump transcript: %v", err))
 	} else {
-		debugLog(fmt.Sprintf("Dumped transcript to %s (%d bytes)", destPath, len(data)))
+		logging.Debug(fmt.Sprintf("Dumped transcript to %s (%d bytes)", destPath, len(data)))
 	}
 }
 
-func handlePostToolUse(input HookInput) {
+func handlePostToolUse(input hook.HookInput) {
 	if input.SessionID == "" {
-		debugLog("No session_id in PostToolUse, skipping")
+		logging.Debug("No session_id in PostToolUse, skipping")
 		return
 	}
 
-	if !acquireLock() {
-		debugLog("Lock held, skipping PostToolUse")
+	if !state.AcquireLock() {
+		logging.Debug("Lock held, skipping PostToolUse")
 		return
 	}
-	defer releaseLock()
+	defer state.ReleaseLock()
 
-	sf := loadState()
+	sf := state.LoadState()
 	ss, ok := sf.Sessions[input.SessionID]
 	if !ok {
-		ss = &SessionState{
+		ss = &hook.SessionState{
 			TranscriptPath: input.TranscriptPath,
 			CWD:            input.CWD,
 		}
 		sf.Sessions[input.SessionID] = ss
 	}
 
-	ss.ToolSpans = append(ss.ToolSpans, ToolSpanData{
+	ss.ToolSpans = append(ss.ToolSpans, hook.ToolSpanData{
 		ToolName:     input.ToolName,
 		ToolUseID:    input.ToolUseID,
 		ToolInput:    input.ToolInput,
@@ -169,39 +152,39 @@ func handlePostToolUse(input HookInput) {
 	})
 	ss.Updated = time.Now()
 
-	if err := saveState(sf); err != nil {
-		logMsg("ERROR", fmt.Sprintf("Failed to save state: %v", err))
+	if err := state.SaveState(sf); err != nil {
+		logging.Log("ERROR", fmt.Sprintf("Failed to save state: %v", err))
 	}
 
-	debugLog(fmt.Sprintf("Recorded tool: %s (%s)", input.ToolName, input.ToolUseID))
+	logging.Debug(fmt.Sprintf("Recorded tool: %s (%s)", input.ToolName, input.ToolUseID))
 }
 
-func handleStop(input HookInput) {
+func handleStop(input hook.HookInput) {
 	start := time.Now()
 
 	// Find transcript path from input or state.
 	transcriptPath := input.TranscriptPath
 	sessionID := input.SessionID
 
-	if !acquireLock() {
-		debugLog("Lock held, skipping Stop")
+	if !state.AcquireLock() {
+		logging.Debug("Lock held, skipping Stop")
 		return
 	}
-	defer releaseLock()
+	defer state.ReleaseLock()
 
-	sf := loadState()
+	sf := state.LoadState()
 
 	// Fall back to state for session info.
 	ss, ok := sf.Sessions[sessionID]
 	if !ok {
-		ss = &SessionState{}
+		ss = &hook.SessionState{}
 		sf.Sessions[sessionID] = ss
 	}
 	if transcriptPath == "" {
 		transcriptPath = ss.TranscriptPath
 	}
 	if transcriptPath == "" {
-		logMsg("ERROR", "No transcript path available")
+		logging.Log("ERROR", "No transcript path available")
 		return
 	}
 
@@ -210,17 +193,17 @@ func handleStop(input HookInput) {
 	}
 
 	// Parse transcript.
-	turns, totalLines, err := parseTranscript(transcriptPath, ss.LastLine)
+	turns, totalLines, err := transcript.ParseTranscript(transcriptPath, ss.LastLine)
 	if err != nil {
-		logMsg("ERROR", fmt.Sprintf("Failed to parse transcript: %v", err))
+		logging.Log("ERROR", fmt.Sprintf("Failed to parse transcript: %v", err))
 		return
 	}
 
 	if len(turns) == 0 {
-		debugLog("No new turns to process")
+		logging.Debug("No new turns to process")
 		ss.LastLine = totalLines
 		ss.Updated = time.Now()
-		_ = saveState(sf)
+		_ = state.SaveState(sf)
 		return
 	}
 
@@ -230,14 +213,14 @@ func handleStop(input HookInput) {
 	}
 
 	// Init OTel and export.
-	shutdown, err := initTracer()
+	shutdown, err := tracer.InitTracer()
 	if err != nil {
-		logMsg("ERROR", fmt.Sprintf("Failed to init tracer: %v", err))
+		logging.Log("ERROR", fmt.Sprintf("Failed to init tracer: %v", err))
 		return
 	}
 	defer shutdown()
 
-	exportSessionTrace(sessionID, turns, ss.ToolSpans, ss.PendingSubagents, ss)
+	tracer.ExportSessionTrace(sessionID, turns, ss.ToolSpans, ss.PendingSubagents, ss)
 
 	// Update state.
 	ss.LastLine = totalLines
@@ -246,66 +229,66 @@ func handleStop(input HookInput) {
 	ss.PendingSubagents = nil // Clear after export.
 	ss.Updated = time.Now()
 
-	if err := saveState(sf); err != nil {
-		logMsg("ERROR", fmt.Sprintf("Failed to save state: %v", err))
+	if err := state.SaveState(sf); err != nil {
+		logging.Log("ERROR", fmt.Sprintf("Failed to save state: %v", err))
 	}
 
 	duration := time.Since(start).Seconds()
-	logMsg("INFO", fmt.Sprintf("Exported %d turns in %.1fs", len(turns), duration))
+	logging.Log("INFO", fmt.Sprintf("Exported %d turns in %.1fs", len(turns), duration))
 }
 
-func handleSubagentStop(input HookInput) {
+func handleSubagentStop(input hook.HookInput) {
 	if input.SessionID == "" || input.AgentTranscriptPath == "" {
-		debugLog("No session_id or agent_transcript_path in SubagentStop, skipping")
+		logging.Debug("No session_id or agent_transcript_path in SubagentStop, skipping")
 		return
 	}
 
-	// Retry transcript read — file may not be flushed yet when SubagentStop fires.
-	var turns []Turn
+	// Retry transcript read -- file may not be flushed yet when SubagentStop fires.
+	var turns []hook.Turn
 	var err error
 	for attempt := 0; attempt < 3; attempt++ {
-		turns, _, err = parseTranscript(input.AgentTranscriptPath, 0)
+		turns, _, err = transcript.ParseTranscript(input.AgentTranscriptPath, 0)
 		if err == nil {
 			break
 		}
-		debugLog(fmt.Sprintf("Transcript not ready (attempt %d): %v", attempt+1, err))
+		logging.Debug(fmt.Sprintf("Transcript not ready (attempt %d): %v", attempt+1, err))
 		time.Sleep(200 * time.Millisecond)
 	}
 	if err != nil {
-		debugLog(fmt.Sprintf("Subagent transcript unavailable, skipping: %v", err))
+		logging.Debug(fmt.Sprintf("Subagent transcript unavailable, skipping: %v", err))
 		return
 	}
 	if len(turns) == 0 {
-		debugLog("No turns in subagent transcript, skipping")
+		logging.Debug("No turns in subagent transcript, skipping")
 		return
 	}
 
-	if !acquireLock() {
-		debugLog("Lock held, skipping SubagentStop")
+	if !state.AcquireLock() {
+		logging.Debug("Lock held, skipping SubagentStop")
 		return
 	}
-	defer releaseLock()
+	defer state.ReleaseLock()
 
-	sf := loadState()
+	sf := state.LoadState()
 	ss, ok := sf.Sessions[input.SessionID]
 	if !ok {
-		ss = &SessionState{
+		ss = &hook.SessionState{
 			TranscriptPath: input.TranscriptPath,
 			CWD:            input.CWD,
 		}
 		sf.Sessions[input.SessionID] = ss
 	}
 
-	ss.PendingSubagents = append(ss.PendingSubagents, PendingSubagent{
+	ss.PendingSubagents = append(ss.PendingSubagents, hook.PendingSubagent{
 		AgentID:   input.AgentID,
 		AgentType: input.AgentType,
 		Turns:     turns,
 	})
 	ss.Updated = time.Now()
 
-	if err := saveState(sf); err != nil {
-		logMsg("ERROR", fmt.Sprintf("Failed to save state: %v", err))
+	if err := state.SaveState(sf); err != nil {
+		logging.Log("ERROR", fmt.Sprintf("Failed to save state: %v", err))
 	}
 
-	debugLog(fmt.Sprintf("Stored subagent %s (%s) with %d turns", input.AgentType, input.AgentID, len(turns)))
+	logging.Debug(fmt.Sprintf("Stored subagent %s (%s) with %d turns", input.AgentType, input.AgentID, len(turns)))
 }

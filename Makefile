@@ -4,7 +4,7 @@ INSTALL_DIR = $(HOME)/.claude/hooks
 .PHONY: build install clean test test-race test-cover fmt setup-hooks
 
 build:
-	go build -o $(BINARY_NAME) .
+	go build -o $(BINARY_NAME) ./cmd/cc-trace
 
 install: build
 	mkdir -p $(INSTALL_DIR)

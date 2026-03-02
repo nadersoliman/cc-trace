@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"cc-trace/internal/hook"
@@ -186,6 +187,31 @@ func TestHandleStop_Integration(t *testing.T) {
 	}
 	if ss.TurnCount != 2 {
 		t.Errorf("TurnCount = %d, want 2", ss.TurnCount)
+	}
+}
+
+func TestHandlePostToolUse_TimingOutput(t *testing.T) {
+	dir := setupTestStateDir(t)
+	logFile := filepath.Join(dir, "test.log")
+	logging.Init(logFile, false)
+	logging.InitTiming(true)
+
+	input := loadFixtureInput(t, "posttooluse_read.json")
+	handlePostToolUse(input)
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "[TIMING]") {
+		t.Errorf("expected [TIMING] in log output, got: %s", content)
+	}
+	if !strings.Contains(content, "PostToolUse") {
+		t.Errorf("expected PostToolUse in timing log, got: %s", content)
+	}
+	if !strings.Contains(content, "total=") {
+		t.Errorf("expected total= in timing log, got: %s", content)
 	}
 }
 

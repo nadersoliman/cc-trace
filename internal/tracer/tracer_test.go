@@ -29,15 +29,15 @@ func TestInitTracerWithExporter(t *testing.T) {
 // --- Helper functions ---
 
 // setupTestTracer creates an InMemoryExporter and wires it as the global tracer.
-func setupTestTracer(t *testing.T) (*tracetest.InMemoryExporter, func()) {
+func setupTestTracer(t *testing.T) (*tracetest.InMemoryExporter, func(), func()) {
 	t.Helper()
 	logging.Init(filepath.Join(t.TempDir(), "test.log"), false)
 	exporter := tracetest.NewInMemoryExporter()
-	shutdown, _, err := InitTracerWithExporter(exporter)
+	shutdown, flush, err := InitTracerWithExporter(exporter)
 	if err != nil {
 		t.Fatalf("InitTracerWithExporter: %v", err)
 	}
-	return exporter, shutdown
+	return exporter, shutdown, flush
 }
 
 // findSpan finds a span by exact name.
@@ -120,7 +120,7 @@ func TestTraceparentParsing(t *testing.T) {
 }
 
 func TestExportSessionTrace_SingleTurn(t *testing.T) {
-	exporter, shutdown := setupTestTracer(t)
+	exporter, shutdown, flush := setupTestTracer(t)
 	defer shutdown()
 
 	sessionID := "test-session-single-turn"
@@ -141,6 +141,7 @@ func TestExportSessionTrace_SingleTurn(t *testing.T) {
 	ss := &hook.SessionState{}
 	ExportSessionTrace(sessionID, turns, nil, nil, ss)
 
+	flush()
 	spans := exporter.GetSpans()
 	if len(spans) != 3 {
 		t.Fatalf("expected 3 spans (Session, Turn, LLM Response), got %d", len(spans))
@@ -199,7 +200,7 @@ func TestExportSessionTrace_SingleTurn(t *testing.T) {
 }
 
 func TestExportSessionTrace_WithTools(t *testing.T) {
-	exporter, shutdown := setupTestTracer(t)
+	exporter, shutdown, flush := setupTestTracer(t)
 	defer shutdown()
 
 	sessionID := "test-session-with-tools"
@@ -226,6 +227,7 @@ func TestExportSessionTrace_WithTools(t *testing.T) {
 	ss := &hook.SessionState{}
 	ExportSessionTrace(sessionID, turns, nil, nil, ss)
 
+	flush()
 	spans := exporter.GetSpans()
 
 	// Should have: Session, Turn 1, LLM Response, Tool: Read
@@ -254,7 +256,7 @@ func TestExportSessionTrace_WithTools(t *testing.T) {
 }
 
 func TestExportSessionTrace_WithSubagent(t *testing.T) {
-	exporter, shutdown := setupTestTracer(t)
+	exporter, shutdown, flush := setupTestTracer(t)
 	defer shutdown()
 
 	sessionID := "test-session-with-subagent"
@@ -312,6 +314,7 @@ func TestExportSessionTrace_WithSubagent(t *testing.T) {
 	ss := &hook.SessionState{}
 	ExportSessionTrace(sessionID, turns, nil, pendingSubagents, ss)
 
+	flush()
 	spans := exporter.GetSpans()
 
 	// Expect Subagent: general-purpose span
@@ -330,7 +333,7 @@ func TestExportSessionTrace_WithSubagent(t *testing.T) {
 }
 
 func TestExportSessionTrace_IncrementalExport(t *testing.T) {
-	exporter, shutdown := setupTestTracer(t)
+	exporter, shutdown, flush := setupTestTracer(t)
 	defer shutdown()
 
 	sessionID := "test-session-incremental"
@@ -349,6 +352,7 @@ func TestExportSessionTrace_IncrementalExport(t *testing.T) {
 	ss := &hook.SessionState{}
 	ExportSessionTrace(sessionID, turns1, nil, nil, ss)
 
+	flush()
 	savedSpanID := ss.SessionSpanID
 	if savedSpanID == "" {
 		t.Fatal("expected SessionSpanID to be set after first export")
@@ -369,6 +373,8 @@ func TestExportSessionTrace_IncrementalExport(t *testing.T) {
 
 	ExportSessionTrace(sessionID, turns2, nil, nil, ss)
 
+	flush()
+
 	// SessionSpanID should be unchanged
 	if ss.SessionSpanID != savedSpanID {
 		t.Errorf("SessionSpanID changed from %s to %s", savedSpanID, ss.SessionSpanID)
@@ -383,7 +389,7 @@ func TestExportSessionTrace_IncrementalExport(t *testing.T) {
 }
 
 func TestExportSessionTrace_SpanAttributes(t *testing.T) {
-	exporter, shutdown := setupTestTracer(t)
+	exporter, shutdown, flush := setupTestTracer(t)
 	defer shutdown()
 
 	sessionID := "test-session-attributes"
@@ -407,6 +413,7 @@ func TestExportSessionTrace_SpanAttributes(t *testing.T) {
 	ss := &hook.SessionState{}
 	ExportSessionTrace(sessionID, turns, nil, nil, ss)
 
+	flush()
 	spans := exporter.GetSpans()
 
 	// Verify Turn span attributes

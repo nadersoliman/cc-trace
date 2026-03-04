@@ -50,6 +50,16 @@ func InitTracer() (func(), error) {
 		return nil, fmt.Errorf("create exporter: %w", err)
 	}
 
+	return initTracerWithBatcher(exporter)
+}
+
+// initTracerWithBatcher sets up the OTel TracerProvider with BatchSpanProcessor.
+// Spans queue in memory and flush as a single OTLP request on Shutdown or
+// periodically (default 5s). Unexported to allow testing the batch path with
+// an in-memory exporter.
+func initTracerWithBatcher(exporter sdktrace.SpanExporter) (func(), error) {
+	ctx := context.Background()
+
 	res, err := resource.New(ctx,
 		resource.WithFromEnv(),
 		resource.WithAttributes(

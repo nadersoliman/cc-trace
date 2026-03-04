@@ -1,16 +1,78 @@
 package tracer
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"cc-trace/internal/hook"
 	"cc-trace/internal/logging"
 
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
+
+// recordingExporter wraps InMemoryExporter but preserves spans across Shutdown.
+type recordingExporter struct {
+	mu    sync.Mutex
+	spans tracetest.SpanStubs
+}
+
+func (e *recordingExporter) ExportSpans(_ context.Context, spans []sdktrace.ReadOnlySpan) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, s := range spans {
+		e.spans = append(e.spans, tracetest.SpanStubFromReadOnlySpan(s))
+	}
+	return nil
+}
+
+func (e *recordingExporter) Shutdown(_ context.Context) error { return nil }
+
+func (e *recordingExporter) GetSpans() tracetest.SpanStubs {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append(tracetest.SpanStubs{}, e.spans...)
+}
+
+func TestBatchExportFlushesOnShutdown(t *testing.T) {
+	logging.Init(filepath.Join(t.TempDir(), "test.log"), false)
+	exporter := &recordingExporter{}
+	shutdown, err := initTracerWithBatcher(exporter)
+	if err != nil {
+		t.Fatalf("initTracerWithBatcher: %v", err)
+	}
+
+	sessionID := "test-batch-flush"
+	now := time.Now()
+	turns := []hook.Turn{
+		{
+			Number:    1,
+			Model:     "claude-sonnet-4-20250514",
+			StartTime: now,
+			EndTime:   now.Add(2 * time.Second),
+		},
+	}
+
+	ss := &hook.SessionState{}
+	ExportSessionTrace(sessionID, turns, nil, nil, ss)
+
+	// With BatchSpanProcessor, spans are queued — not yet visible.
+	if spans := exporter.GetSpans(); len(spans) != 0 {
+		t.Errorf("expected 0 spans before shutdown (batch queued), got %d", len(spans))
+	}
+
+	// Shutdown flushes the batch.
+	shutdown()
+
+	spans := exporter.GetSpans()
+	if len(spans) != 3 {
+		t.Fatalf("expected 3 spans (Session, Turn, LLM Response) after shutdown, got %d", len(spans))
+	}
+}
 
 func TestInitTracerWithExporter(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()

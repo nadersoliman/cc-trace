@@ -36,7 +36,7 @@ Session Root
 - **Trace ID**: Deterministic `SHA-256(session_id)[:16]` -- consistent across invocations
 - **TRACEPARENT**: Honors W3C `TRACEPARENT` env var for external trace correlation
 - **Timing**: From transcript timestamps (real wall-clock, not hook execution time)
-- **Export**: `SimpleSpanProcessor` (synchronous) -- required for short-lived CLI
+- **Export**: `BatchSpanProcessor` with explicit shutdown -- spans queue in memory and flush as a single OTLP request when `tp.Shutdown()` is called before process exit
 
 ## Files
 

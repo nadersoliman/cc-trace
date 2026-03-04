@@ -31,6 +31,9 @@ func traceIDFromSession(sessionID string) trace.TraceID {
 }
 
 // InitTracer sets up the OTel TracerProvider with OTLP HTTP exporter.
+// Uses BatchSpanProcessor to queue all spans in memory and flush them as a
+// single OTLP request on Shutdown. This works for a short-lived CLI because
+// the caller always invokes shutdown() before the process exits.
 //
 // All configuration is read from standard OTel environment variables:
 //   - OTEL_EXPORTER_OTLP_ENDPOINT (default: http://localhost:4318)
@@ -47,11 +50,38 @@ func InitTracer() (func(), error) {
 		return nil, fmt.Errorf("create exporter: %w", err)
 	}
 
-	return InitTracerWithExporter(exporter)
+	res, err := resource.New(ctx,
+		resource.WithFromEnv(),
+		resource.WithAttributes(
+			attribute.String("hook.version", "0.1.0"),
+		),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create resource: %w", err)
+	}
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter,
+			sdktrace.WithExportTimeout(5*time.Second),
+			sdktrace.WithBatchTimeout(0),
+		),
+		sdktrace.WithResource(res),
+	)
+	otel.SetTracerProvider(tp)
+
+	shutdown := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tp.Shutdown(ctx); err != nil {
+			logging.Log("ERROR", fmt.Sprintf("TracerProvider shutdown: %v", err))
+		}
+	}
+	return shutdown, nil
 }
 
 // InitTracerWithExporter sets up the OTel TracerProvider with the given exporter.
-// This allows tests to inject an in-memory exporter instead of a real OTLP one.
+// Uses SimpleSpanProcessor for synchronous export, allowing tests to read spans
+// immediately via the in-memory exporter without explicit flush calls.
 func InitTracerWithExporter(exporter sdktrace.SpanExporter) (func(), error) {
 	ctx := context.Background()
 
@@ -74,7 +104,9 @@ func InitTracerWithExporter(exporter sdktrace.SpanExporter) (func(), error) {
 	shutdown := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = tp.Shutdown(ctx)
+		if err := tp.Shutdown(ctx); err != nil {
+			logging.Log("ERROR", fmt.Sprintf("TracerProvider shutdown: %v", err))
+		}
 	}
 	return shutdown, nil
 }

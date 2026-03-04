@@ -14,7 +14,7 @@ import (
 
 func TestInitTracerWithExporter(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
-	shutdown, err := InitTracerWithExporter(exporter)
+	shutdown, _, err := InitTracerWithExporter(exporter)
 	if err != nil {
 		t.Fatalf("InitTracerWithExporter failed: %v", err)
 	}
@@ -33,7 +33,7 @@ func setupTestTracer(t *testing.T) (*tracetest.InMemoryExporter, func()) {
 	t.Helper()
 	logging.Init(filepath.Join(t.TempDir(), "test.log"), false)
 	exporter := tracetest.NewInMemoryExporter()
-	shutdown, err := InitTracerWithExporter(exporter)
+	shutdown, _, err := InitTracerWithExporter(exporter)
 	if err != nil {
 		t.Fatalf("InitTracerWithExporter: %v", err)
 	}

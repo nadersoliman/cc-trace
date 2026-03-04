@@ -47,12 +47,17 @@ func InitTracer() (func(), error) {
 		return nil, fmt.Errorf("create exporter: %w", err)
 	}
 
-	return InitTracerWithExporter(exporter)
+	shutdown, _, err := InitTracerWithExporter(exporter)
+	return shutdown, err
 }
 
 // InitTracerWithExporter sets up the OTel TracerProvider with the given exporter.
 // This allows tests to inject an in-memory exporter instead of a real OTLP one.
-func InitTracerWithExporter(exporter sdktrace.SpanExporter) (func(), error) {
+//
+// Returns (shutdown, flush, error):
+//   - shutdown: flushes pending spans and shuts down the provider
+//   - flush: exports pending spans without shutting down (for tests)
+func InitTracerWithExporter(exporter sdktrace.SpanExporter) (func(), func(), error) {
 	ctx := context.Background()
 
 	res, err := resource.New(ctx,
@@ -62,11 +67,12 @@ func InitTracerWithExporter(exporter sdktrace.SpanExporter) (func(), error) {
 		),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create resource: %w", err)
+		return nil, nil, fmt.Errorf("create resource: %w", err)
 	}
 
+	bsp := sdktrace.NewBatchSpanProcessor(exporter)
 	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithSyncer(exporter),
+		sdktrace.WithSpanProcessor(bsp),
 		sdktrace.WithResource(res),
 	)
 	otel.SetTracerProvider(tp)
@@ -76,7 +82,12 @@ func InitTracerWithExporter(exporter sdktrace.SpanExporter) (func(), error) {
 		defer cancel()
 		_ = tp.Shutdown(ctx)
 	}
-	return shutdown, nil
+	flush := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = tp.ForceFlush(ctx)
+	}
+	return shutdown, flush, nil
 }
 
 // ExportSessionTrace creates all spans for a session and exports them.

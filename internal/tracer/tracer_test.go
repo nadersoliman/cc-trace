@@ -439,3 +439,35 @@ func TestExportSessionTrace_SpanAttributes(t *testing.T) {
 		t.Errorf("gen_ai.usage.cache_creation_tokens = %v, want 10", v)
 	}
 }
+
+func TestBatchFlush_SpansVisibleAfterFlush(t *testing.T) {
+	logging.Init(filepath.Join(t.TempDir(), "test.log"), false)
+	exporter := tracetest.NewInMemoryExporter()
+	shutdown, flush, err := InitTracerWithExporter(exporter)
+	if err != nil {
+		t.Fatalf("InitTracerWithExporter: %v", err)
+	}
+	defer shutdown()
+
+	// Create a span
+	sessionID := "test-batch-flush"
+	now := time.Now()
+	turns := []hook.Turn{
+		{
+			Number:    1,
+			Model:     "claude-sonnet-4-20250514",
+			StartTime: now,
+			EndTime:   now.Add(1 * time.Second),
+		},
+	}
+	ss := &hook.SessionState{}
+	ExportSessionTrace(sessionID, turns, nil, nil, ss)
+
+	// Flush must be called to see spans with batch processor
+	flush()
+
+	spans := exporter.GetSpans()
+	if len(spans) != 3 {
+		t.Fatalf("expected 3 spans after flush, got %d", len(spans))
+	}
+}

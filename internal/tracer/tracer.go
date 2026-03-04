@@ -41,7 +41,7 @@ func InitTracer() (func(), error) {
 
 	exporter, err := otlptracehttp.New(ctx,
 		otlptracehttp.WithInsecure(),
-		otlptracehttp.WithTimeout(5*time.Second),
+		otlptracehttp.WithTimeout(60*time.Second),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create exporter: %w", err)

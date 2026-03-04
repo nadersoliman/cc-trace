@@ -78,14 +78,10 @@ func InitTracerWithExporter(exporter sdktrace.SpanExporter) (func(), func(), err
 	otel.SetTracerProvider(tp)
 
 	shutdown := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = tp.Shutdown(ctx)
+		_ = tp.Shutdown(context.Background())
 	}
 	flush := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = tp.ForceFlush(ctx)
+		_ = tp.ForceFlush(context.Background())
 	}
 	return shutdown, flush, nil
 }

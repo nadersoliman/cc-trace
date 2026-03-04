@@ -63,7 +63,6 @@ func InitTracer() (func(), error) {
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter,
 			sdktrace.WithExportTimeout(5*time.Second),
-			sdktrace.WithBatchTimeout(0),
 		),
 		sdktrace.WithResource(res),
 	)

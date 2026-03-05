@@ -1,6 +1,5 @@
 # Compiled binary
 cc-trace
-otel_trace_hook
 
 # OS
 .DS_Store

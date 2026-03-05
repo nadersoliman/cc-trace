@@ -7,14 +7,14 @@ Formerly lived in `nadersoliman/k8s-lab` under `hooks/`. Issues #5-#9 on the k8s
 ## Build & Install
 
 ```bash
-make install    # builds and copies binary to ~/.claude/hooks/otel_trace_hook
+make install    # builds and copies binary to ~/.claude/hooks/cc-trace
 ```
 
 ## Architecture
 
 Short-lived CLI invoked by Claude Code on **PostToolUse**, **PostToolUseFailure**, **SubagentStop**, and **Stop** hook events via stdin JSON.
 
-- **PostToolUse / PostToolUseFailure** (< 10ms, no network): Records tool data to `~/.claude/state/otel_trace_state.json`
+- **PostToolUse / PostToolUseFailure** (< 10ms, no network): Records tool data to `~/.claude/state/cc_trace_state.json`
 - **SubagentStop** (< 50ms, no network): Parses subagent transcript and stores for later export
 - **Stop** (< 2s): Parses JSONL transcript, creates OTel spans, exports via OTLP/HTTP, updates state
 
@@ -58,9 +58,9 @@ All configuration follows the [OTel environment variable specification](https://
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Base OTLP endpoint. The HTTP exporter appends `/v1/traces` automatically. Shared with Claude Code's metrics/logs -- no separate traces endpoint needed. |
 | `OTEL_SERVICE_NAME` | `unknown_service` | `service.name` resource attribute |
 | `OTEL_RESOURCE_ATTRIBUTES` | (none) | Comma-separated `key=value` pairs added to the trace resource (e.g., `project.name=k8s-lab`) |
-| `CC_OTEL_TRACE_DEBUG` | `false` | Debug logging to `~/.claude/state/otel_trace_hook.log` |
-| `CC_OTEL_TRACE_TIMING` | `false` | Phase-level timing logs to `~/.claude/state/otel_trace_hook.log` (format: `total=Nms EventName session=... phase=Nms ...`) |
-| `CC_OTEL_TRACE_DUMP` | `false` | Dump raw hook payloads and transcripts to `/tmp/cc-trace/dumps/` for investigation |
+| `CC_TRACE_DEBUG` | `false` | Debug logging to `~/.claude/state/cc_trace.log` |
+| `CC_TRACE_TIMING` | `false` | Phase-level timing logs to `~/.claude/state/cc_trace.log` (format: `total=Nms EventName session=... phase=Nms ...`) |
+| `CC_TRACE_DUMP` | `false` | Dump raw hook payloads and transcripts to `/tmp/cc-trace/dumps/` for investigation |
 
 **Note:** The hook previously used gRPC (`otlptracegrpc`, port 4317) with a separate `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`. It now uses HTTP/protobuf (`otlptracehttp`) to share the same `OTEL_EXPORTER_OTLP_ENDPOINT` as Claude Code's metrics and logs. Per the OTel spec, the HTTP exporter appends `/v1/traces` to the base endpoint automatically.
 

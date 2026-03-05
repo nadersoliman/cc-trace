@@ -42,10 +42,10 @@ Create `testdata/fixtures/transcript_tools.jsonl`:
 ```jsonl
 {"type":"user","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","cwd":"/home/testuser/projects/cc-trace","message":{"role":"user","content":[{"type":"text","text":"Read the Makefile and show me the build command"}]},"timestamp":"2026-01-15T10:00:00.000Z","uuid":"u1"}
 {"type":"assistant","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","message":{"role":"assistant","model":"claude-sonnet-4-20250514","id":"msg_test_010","type":"message","content":[{"type":"text","text":"Let me read the Makefile."},{"type":"tool_use","id":"toolu_test_001","name":"Read","input":{"file_path":"/home/testuser/projects/cc-trace/Makefile"}}],"stop_reason":"tool_use","usage":{"input_tokens":200,"output_tokens":40,"cache_read_input_tokens":100,"cache_creation_input_tokens":0}},"timestamp":"2026-01-15T10:00:03.000Z","uuid":"a1"}
-{"type":"user","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_test_001","content":"BINARY_NAME = otel_trace_hook\nINSTALL_DIR = $(HOME)/.claude/hooks\n\nbuild:\n\tgo build -o $(BINARY_NAME) ."}]},"timestamp":"2026-01-15T10:00:04.000Z","uuid":"tr1"}
+{"type":"user","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_test_001","content":"BINARY_NAME = cc-trace\nINSTALL_DIR = $(HOME)/.claude/hooks\n\nbuild:\n\tgo build -o $(BINARY_NAME) ."}]},"timestamp":"2026-01-15T10:00:04.000Z","uuid":"tr1"}
 {"type":"assistant","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","message":{"role":"assistant","model":"claude-sonnet-4-20250514","id":"msg_test_011","type":"message","content":[{"type":"text","text":"Now let me run it."},{"type":"tool_use","id":"toolu_test_002","name":"Bash","input":{"command":"make build","description":"Build the binary"}}],"stop_reason":"tool_use","usage":{"input_tokens":300,"output_tokens":30,"cache_read_input_tokens":150,"cache_creation_input_tokens":0}},"timestamp":"2026-01-15T10:00:06.000Z","uuid":"a2"}
-{"type":"user","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_test_002","content":"go build -o otel_trace_hook ."}]},"timestamp":"2026-01-15T10:00:08.000Z","uuid":"tr2"}
-{"type":"assistant","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","message":{"role":"assistant","model":"claude-sonnet-4-20250514","id":"msg_test_012","type":"message","content":[{"type":"text","text":"The build command is `go build -o otel_trace_hook .`. It compiles the project into a single binary."}],"stop_reason":"end_turn","usage":{"input_tokens":400,"output_tokens":35,"cache_read_input_tokens":200,"cache_creation_input_tokens":0}},"timestamp":"2026-01-15T10:00:12.000Z","uuid":"a3"}
+{"type":"user","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_test_002","content":"go build -o cc-trace ."}]},"timestamp":"2026-01-15T10:00:08.000Z","uuid":"tr2"}
+{"type":"assistant","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","message":{"role":"assistant","model":"claude-sonnet-4-20250514","id":"msg_test_012","type":"message","content":[{"type":"text","text":"The build command is `go build -o cc-trace .`. It compiles the project into a single binary."}],"stop_reason":"end_turn","usage":{"input_tokens":400,"output_tokens":35,"cache_read_input_tokens":200,"cache_creation_input_tokens":0}},"timestamp":"2026-01-15T10:00:12.000Z","uuid":"a3"}
 {"type":"system","sessionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","subtype":"turn_duration","durationMs":12000,"timestamp":"2026-01-15T10:00:12.500Z","uuid":"sys1"}
 ```
 
@@ -718,7 +718,7 @@ func TestLoadState_Corrupt(t *testing.T) {
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(stateDir, "otel_trace_state.json"), []byte("{corrupt"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(stateDir, "cc_trace_state.json"), []byte("{corrupt"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -850,7 +850,7 @@ func TestStaleLockRemoval(t *testing.T) {
 	dir := setupTestStateDir(t)
 
 	// Create a lock file with an old modification time.
-	lockPath := filepath.Join(dir, ".claude", "state", "otel_trace_state.lock")
+	lockPath := filepath.Join(dir, ".claude", "state", "cc_trace_state.lock")
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
 		t.Fatal(err)
 	}

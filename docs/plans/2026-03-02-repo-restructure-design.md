@@ -71,8 +71,8 @@ Fixtures stay at project root in `testdata/fixtures/`. Each internal package's t
 
 ## Build Changes
 
-- `go build -o cc-trace ./cmd/cc-trace` replaces `go build -o otel_trace_hook .`
-- Install target copies binary as `otel_trace_hook` (unchanged)
+- `go build -o cc-trace ./cmd/cc-trace` replaces `go build -o cc-trace .`
+- Install target copies binary as `cc-trace` (unchanged)
 - CI: `go test ./...` already recurses into subdirectories
 
 ## Visibility Changes

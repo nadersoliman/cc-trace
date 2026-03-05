@@ -281,7 +281,7 @@ git commit -m "Move entry point to cmd/cc-trace, delete root Go files" --author=
 Change build command:
 
 ```makefile
-BINARY_NAME = otel_trace_hook
+BINARY_NAME = cc-trace
 INSTALL_DIR = $(HOME)/.claude/hooks
 
 .PHONY: build install clean test test-race test-cover fmt setup-hooks
@@ -334,7 +334,7 @@ Update the Files table to reflect new paths:
 
 Run:
 ```bash
-make build      # Should produce otel_trace_hook binary
+make build      # Should produce cc-trace binary
 make test       # All tests pass
 make test-race  # Race-clean
 make test-cover # Coverage report

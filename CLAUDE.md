@@ -36,7 +36,7 @@ Session Root
 - **Trace ID**: Deterministic `SHA-256(session_id)[:16]` -- consistent across invocations
 - **TRACEPARENT**: Honors W3C `TRACEPARENT` env var for external trace correlation
 - **Timing**: From transcript timestamps (real wall-clock, not hook execution time)
-- **Export**: `SimpleSpanProcessor` (synchronous) -- required for short-lived CLI
+- **Export**: `BatchSpanProcessor` -- spans queued in memory, flushed on `Shutdown()`
 
 ## Files
 

@@ -19,8 +19,8 @@ var (
 // Init configures the state file and lock file paths under homeDir.
 func Init(homeDir string) {
 	stateDir := filepath.Join(homeDir, ".claude", "state")
-	stateFilePath = filepath.Join(stateDir, "otel_trace_state.json")
-	lockFilePath = filepath.Join(stateDir, "otel_trace_state.lock")
+	stateFilePath = filepath.Join(stateDir, "cc_trace_state.json")
+	lockFilePath = filepath.Join(stateDir, "cc_trace_state.lock")
 }
 
 const staleLockAge = 5 * time.Minute

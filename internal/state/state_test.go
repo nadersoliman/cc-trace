@@ -58,7 +58,7 @@ func TestLoadState_Corrupt(t *testing.T) {
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatalf("failed to create state dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(stateDir, "otel_trace_state.json"), []byte("{corrupt"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(stateDir, "cc_trace_state.json"), []byte("{corrupt"), 0o644); err != nil {
 		t.Fatalf("failed to write corrupt state file: %v", err)
 	}
 
@@ -233,7 +233,7 @@ func TestStaleLockRemoval(t *testing.T) {
 	}
 
 	// Create lock file.
-	lockFile := filepath.Join(stateDir, "otel_trace_state.lock")
+	lockFile := filepath.Join(stateDir, "cc_trace_state.lock")
 	f, err := os.Create(lockFile)
 	if err != nil {
 		t.Fatalf("failed to create lock file: %v", err)

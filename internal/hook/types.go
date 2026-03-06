@@ -45,6 +45,7 @@ type SessionState struct {
 	CWD              string            `json:"cwd"`
 	LastLine         int               `json:"last_line"`
 	TurnCount        int               `json:"turn_count"`
+	Epoch            int               `json:"epoch"`
 	ToolSpans        []ToolSpanData    `json:"tool_spans"`
 	PendingSubagents []PendingSubagent `json:"pending_subagents,omitempty"`
 	Updated          time.Time         `json:"updated"`

@@ -17,8 +17,9 @@ import (
 )
 
 var (
-	dumpEnabled bool
-	dumpDir     = "/tmp/cc-trace/dumps"
+	dumpEnabled   bool
+	rotateEnabled bool
+	dumpDir       = "/tmp/cc-trace/dumps"
 )
 
 func main() {
@@ -30,6 +31,7 @@ func main() {
 	logFilePath := filepath.Join(homeDir, ".claude", "state", "cc_trace.log")
 	debugEnabled := strings.EqualFold(os.Getenv("CC_TRACE_DEBUG"), "true")
 	dumpEnabled = strings.EqualFold(os.Getenv("CC_TRACE_DUMP"), "true")
+	rotateEnabled = strings.EqualFold(os.Getenv("CC_TRACE_ROTATE"), "true")
 	timingEnabled := strings.EqualFold(os.Getenv("CC_TRACE_TIMING"), "true")
 	logging.Init(logFilePath, debugEnabled)
 	logging.InitTiming(timingEnabled)
@@ -250,7 +252,7 @@ func handleStop(input hook.HookInput) {
 	defer shutdown() // Safety net for panics.
 
 	exportStart := time.Now()
-	tracer.ExportSessionTrace(sessionID, turns, ss.ToolSpans, ss.PendingSubagents, ss)
+	tracer.ExportSessionTrace(sessionID, turns, ss.ToolSpans, ss.PendingSubagents, ss, rotateEnabled)
 	exportDur := time.Since(exportStart)
 
 	shutdownStart := time.Now()
@@ -262,6 +264,10 @@ func handleStop(input hook.HookInput) {
 	ss.TurnCount += len(turns)
 	ss.ToolSpans = nil
 	ss.PendingSubagents = nil
+	if rotateEnabled {
+		ss.Epoch++
+		ss.SessionSpanID = ""
+	}
 	ss.Updated = time.Now()
 
 	saveStart := time.Now()

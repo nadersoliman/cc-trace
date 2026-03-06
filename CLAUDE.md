@@ -61,6 +61,7 @@ All configuration follows the [OTel environment variable specification](https://
 | `CC_TRACE_DEBUG` | `false` | Debug logging to `~/.claude/state/cc_trace.log` |
 | `CC_TRACE_TIMING` | `false` | Phase-level timing logs to `~/.claude/state/cc_trace.log` (format: `total=Nms EventName session=... phase=Nms ...`) |
 | `CC_TRACE_DUMP` | `false` | Dump raw hook payloads and transcripts to `/tmp/cc-trace/dumps/` for investigation |
+| `CC_TRACE_ROTATE` | `false` | Rotate trace ID per resume. Each Stop gets its own self-contained trace, preventing long-lived sessions from outliving backend retention. |
 
 **Note:** The hook previously used gRPC (`otlptracegrpc`, port 4317) with a separate `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`. It now uses HTTP/protobuf (`otlptracehttp`) to share the same `OTEL_EXPORTER_OTLP_ENDPOINT` as Claude Code's metrics and logs. Per the OTel spec, the HTTP exporter appends `/v1/traces` to the base endpoint automatically.
 

@@ -23,8 +23,13 @@ import (
 )
 
 // traceIDFromSession generates a deterministic trace ID from a session ID.
-func traceIDFromSession(sessionID string) trace.TraceID {
-	h := sha256.Sum256([]byte(sessionID))
+// When epoch > 0, the trace ID includes the epoch to produce a unique trace per resume.
+func traceIDFromSession(sessionID string, epoch int) trace.TraceID {
+	input := sessionID
+	if epoch > 0 {
+		input = fmt.Sprintf("%s:%d", sessionID, epoch)
+	}
+	h := sha256.Sum256([]byte(input))
 	var tid trace.TraceID
 	copy(tid[:], h[:16])
 	return tid
@@ -87,7 +92,9 @@ func InitTracerWithExporter(exporter sdktrace.SpanExporter) (func(), func(), err
 }
 
 // ExportSessionTrace creates all spans for a session and exports them.
-func ExportSessionTrace(sessionID string, turns []hook.Turn, toolSpanData []hook.ToolSpanData, pendingSubagents []hook.PendingSubagent, ss *hook.SessionState) {
+// When rotate is true, each invocation creates a new trace (epoch-based trace ID)
+// and a fresh Session root span, producing self-contained traces per conversation.
+func ExportSessionTrace(sessionID string, turns []hook.Turn, toolSpanData []hook.ToolSpanData, pendingSubagents []hook.PendingSubagent, ss *hook.SessionState, rotate bool) {
 	tracer := otel.Tracer("cc-trace")
 
 	if len(turns) == 0 {
@@ -108,16 +115,16 @@ func ExportSessionTrace(sessionID string, turns []hook.Turn, toolSpanData []hook
 		baseCtx = parentCtx
 		logging.Debug("Using TRACEPARENT from environment for parent context")
 	} else {
-		tid := traceIDFromSession(sessionID)
+		tid := traceIDFromSession(sessionID, ss.Epoch)
 		baseCtx = contextWithTraceID(tid)
 	}
 
 	// Build the session context for turn spans.
-	// First Stop: create a new Session root span and persist its SpanID.
-	// Subsequent Stops: reuse the stored SpanID as remote parent (no new Session span).
+	// When rotating, always create a fresh Session root span per conversation.
+	// Otherwise: first Stop creates a new span, subsequent Stops reuse the stored SpanID.
 	var sessionCtx context.Context
 	var sessionSpan trace.Span
-	if ss.SessionSpanID == "" {
+	if ss.SessionSpanID == "" || rotate {
 		sessionStart := turns[0].StartTime
 		sessionCtx, sessionSpan = tracer.Start(baseCtx, fmt.Sprintf("Session %s", truncate(sessionID, 12)),
 			trace.WithTimestamp(sessionStart),

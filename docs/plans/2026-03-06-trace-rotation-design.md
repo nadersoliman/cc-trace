@@ -48,11 +48,15 @@ Session: <session_id> epoch N
 
 All traces from the same session share the `session.id` span attribute (already set on the Session root span). Search Grafana Tempo by `session.id = "f5df38cb-..."` to find all conversation segments.
 
+## TRACEPARENT Interaction
+
+When `TRACEPARENT` is set, the external trace owns the trace ID. `CC_TRACE_ROTATE` is ignored -- no epoch increment, no SessionSpanID clearing, no fresh Session root span per Stop. The session attaches to the external trace as a child, regardless of the rotation flag.
+
 ## Feature Flag
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `CC_TRACE_ROTATE` | `false` | Rotate trace ID per resume. Each Stop gets its own trace. |
+| `CC_TRACE_ROTATE` | `false` | Rotate trace ID per resume. Each Stop gets its own trace. Ignored when `TRACEPARENT` is set. |
 
 ## Files Changed
 

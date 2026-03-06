@@ -108,23 +108,30 @@ func ExportSessionTrace(sessionID string, turns []hook.Turn, toolSpanData []hook
 	matched := make([]bool, len(pendingSubagents))
 
 	// Determine the base trace context.
-	// If TRACEPARENT is set, the session becomes a child of the external trace.
+	// If TRACEPARENT is set, the session becomes a child of the external trace
+	// and rotation is suppressed — the external trace owns the trace ID.
 	// Otherwise, use a deterministic trace ID from the session ID (standalone mode).
 	var baseCtx context.Context
+	var hasTraceparent bool
 	if parentCtx, ok := parseTraceparent(); ok {
 		baseCtx = parentCtx
+		hasTraceparent = true
 		logging.Debug("Using TRACEPARENT from environment for parent context")
 	} else {
 		tid := traceIDFromSession(sessionID, ss.Epoch)
 		baseCtx = contextWithTraceID(tid)
 	}
 
+	// Rotation only applies in standalone mode (no TRACEPARENT).
+	// When an external trace context is provided, the caller owns the trace ID.
+	effectiveRotate := rotate && !hasTraceparent
+
 	// Build the session context for turn spans.
 	// When rotating, always create a fresh Session root span per conversation.
 	// Otherwise: first Stop creates a new span, subsequent Stops reuse the stored SpanID.
 	var sessionCtx context.Context
 	var sessionSpan trace.Span
-	if ss.SessionSpanID == "" || rotate {
+	if ss.SessionSpanID == "" || effectiveRotate {
 		sessionStart := turns[0].StartTime
 		sessionCtx, sessionSpan = tracer.Start(baseCtx, fmt.Sprintf("Session %s", truncate(sessionID, 12)),
 			trace.WithTimestamp(sessionStart),

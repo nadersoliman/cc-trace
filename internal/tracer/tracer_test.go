@@ -581,3 +581,68 @@ func TestExportSessionTrace_Rotation(t *testing.T) {
 		t.Errorf("session.id = %v, want %s", v, sessionID)
 	}
 }
+
+func TestExportSessionTrace_TraceparentSuppressesRotation(t *testing.T) {
+	exporter, shutdown, flush := setupTestTracer(t)
+	defer shutdown()
+
+	// Set TRACEPARENT -- rotation should be suppressed.
+	t.Setenv("TRACEPARENT", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
+
+	sessionID := "test-session-traceparent-rotation"
+	now := time.Now()
+
+	// First export with rotate=true but TRACEPARENT set.
+	turns1 := []hook.Turn{
+		{
+			Number:    1,
+			Model:     "claude-sonnet-4-20250514",
+			StartTime: now,
+			EndTime:   now.Add(2 * time.Second),
+		},
+	}
+
+	ss := &hook.SessionState{}
+	ExportSessionTrace(sessionID, turns1, nil, nil, ss, true)
+	flush()
+
+	spans1 := exporter.GetSpans()
+	if len(spans1) != 3 {
+		t.Fatalf("first export: expected 3 spans, got %d", len(spans1))
+	}
+	firstTraceID := spans1[0].SpanContext.TraceID()
+	savedSpanID := ss.SessionSpanID
+
+	exporter.Reset()
+
+	// Second export: same session state (caller would NOT increment epoch
+	// because TRACEPARENT is set), rotate=true still passed but should be ignored.
+	turns2 := []hook.Turn{
+		{
+			Number:    2,
+			Model:     "claude-sonnet-4-20250514",
+			StartTime: now.Add(5 * time.Second),
+			EndTime:   now.Add(7 * time.Second),
+		},
+	}
+
+	ExportSessionTrace(sessionID, turns2, nil, nil, ss, true)
+	flush()
+
+	spans2 := exporter.GetSpans()
+
+	// Trace ID should be the TRACEPARENT's trace ID, same both times.
+	secondTraceID := spans2[0].SpanContext.TraceID()
+	if firstTraceID != secondTraceID {
+		t.Errorf("TRACEPARENT should keep same trace ID: got %s and %s", firstTraceID, secondTraceID)
+	}
+
+	// SessionSpanID should be reused (no rotation), so no new Session span.
+	if ss.SessionSpanID != savedSpanID {
+		t.Errorf("SessionSpanID should be reused under TRACEPARENT: was %s, now %s", savedSpanID, ss.SessionSpanID)
+	}
+	sessionSpans := findSpans(spans2, "Session")
+	if len(sessionSpans) != 0 {
+		t.Errorf("expected 0 Session spans (reusing existing), got %d", len(sessionSpans))
+	}
+}

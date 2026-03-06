@@ -264,7 +264,9 @@ func handleStop(input hook.HookInput) {
 	ss.TurnCount += len(turns)
 	ss.ToolSpans = nil
 	ss.PendingSubagents = nil
-	if rotateEnabled {
+	// Rotation only applies in standalone mode (no TRACEPARENT).
+	// When an external trace provides the trace ID, epoch rotation is meaningless.
+	if rotateEnabled && os.Getenv("TRACEPARENT") == "" {
 		ss.Epoch++
 		ss.SessionSpanID = ""
 	}

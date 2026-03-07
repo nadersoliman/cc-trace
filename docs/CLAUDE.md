@@ -36,3 +36,11 @@ A spike is **fact-finding, not decision-making**. Findings feed into issues and 
 Plans use a two-document pattern:
 - **Design doc**: problem, solution approach, trade-offs, files changed
 - **Implementation doc**: step-by-step execution checklist
+
+## Package-Level CLAUDE.md Files
+
+Packages with domain-specific conventions have their own CLAUDE.md:
+
+| Path | Covers |
+|------|--------|
+| `internal/tracer/CLAUDE.md` | Span attribute naming convention, current attribute map |

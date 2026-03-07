@@ -82,6 +82,20 @@ Tempo deduplicates resource attributes in its Parquet storage -- stored once per
 - `gen_ai.cost_estimate` -- on LLM Response spans, if we add cost tracking
 - `turn.tool_count` -- on Turn spans, for quick filtering of complex turns
 
+### Hook payload fields not yet captured
+
+Examined a `PostToolUseFailure` dump. These fields are available but not yet on spans:
+
+| Hook field | Proposed attribute | Span | Notes |
+|---|---|---|---|
+| `error` | `error` | Tool | Failure reason -- critical for debugging. Flat field, no domain prefix. |
+| `tool_input` | `tool.input` | Tool | What the tool was asked to do. High cardinality, potentially sensitive. Consider truncation or a flag. |
+| `permission_mode` | `permission_mode` | Turn or Session | Session's permission level. Flat field. |
+| `is_interrupt` | `is_interrupt` | Tool | Whether user interrupted. Flat field -- not scoped to tool, it's a top-level event property. |
+| `hook_event_name` | `hook.event_name` | Tool | Which hook fired (PostToolUse vs PostToolUseFailure). Domain-prefixed. |
+
+See `internal/tracer/CLAUDE.md` for the attribute naming convention that governs how hook payload fields map to span attribute names.
+
 ### Rule of thumb for cc-trace
 
 **Resource**: doesn't change within a single hook invocation (service, project, hook version, host)

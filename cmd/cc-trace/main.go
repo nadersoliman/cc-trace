@@ -234,10 +234,16 @@ func handlePostToolUseFailure(input hook.PostToolUseFailurePayload) {
 	}
 
 	ss.ToolSpans = append(ss.ToolSpans, hook.ToolSpanData{
-		ToolName:  input.ToolName,
-		ToolUseID: input.ToolUseID,
-		ToolInput: input.ToolInput,
-		Timestamp: time.Now(),
+		ToolName:       input.ToolName,
+		ToolUseID:      input.ToolUseID,
+		ToolInput:      input.ToolInput,
+		Timestamp:      time.Now(),
+		Error:          input.Error,
+		IsInterrupt:    input.IsInterrupt,
+		HookEventName:  input.HookEventName,
+		PermissionMode: input.PermissionMode,
+		AgentID:        input.AgentID,
+		AgentType:      input.AgentType,
 	})
 	ss.Updated = time.Now()
 
@@ -247,7 +253,7 @@ func handlePostToolUseFailure(input hook.PostToolUseFailurePayload) {
 	}
 	saveDur := time.Since(saveStart)
 
-	logging.Debug(fmt.Sprintf("Recorded tool failure: %s (%s)", input.ToolName, input.ToolUseID))
+	logging.Debug(fmt.Sprintf("Recorded tool failure: %s (%s) error=%q", input.ToolName, input.ToolUseID, input.Error))
 
 	sid := input.SessionID
 	if len(sid) > 8 {

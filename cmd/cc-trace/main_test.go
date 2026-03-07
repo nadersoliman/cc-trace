@@ -130,6 +130,35 @@ func TestHandlePostToolUseFailure_Integration(t *testing.T) {
 	}
 }
 
+func TestHandlePostToolUseFailure_StoresFailureFields(t *testing.T) {
+	setupTestStateDir(t)
+
+	input := loadFixture[hook.PostToolUseFailurePayload](t, "posttooluse_failure.json")
+	handlePostToolUseFailure(input)
+
+	sf := state.LoadState()
+	ss, ok := sf.Sessions[input.SessionID]
+	if !ok {
+		t.Fatalf("session %q not found in state", input.SessionID)
+	}
+	if len(ss.ToolSpans) != 1 {
+		t.Fatalf("expected 1 ToolSpan, got %d", len(ss.ToolSpans))
+	}
+	tsd := ss.ToolSpans[0]
+	if tsd.Error != "Exit code 1\nbuild failed" {
+		t.Errorf("Error = %q, want %q", tsd.Error, "Exit code 1\nbuild failed")
+	}
+	if tsd.IsInterrupt != false {
+		t.Errorf("IsInterrupt = %v, want false", tsd.IsInterrupt)
+	}
+	if tsd.HookEventName != "PostToolUseFailure" {
+		t.Errorf("HookEventName = %q, want %q", tsd.HookEventName, "PostToolUseFailure")
+	}
+	if tsd.PermissionMode != "default" {
+		t.Errorf("PermissionMode = %q, want %q", tsd.PermissionMode, "default")
+	}
+}
+
 func TestHandleSubagentStop_Integration(t *testing.T) {
 	setupTestStateDir(t)
 

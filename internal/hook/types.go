@@ -49,13 +49,19 @@ type StopPayload struct {
 	LastAssistantMsg string `json:"last_assistant_message"`
 }
 
-// ToolSpanData is recorded by PostToolUse for later use by Stop.
+// ToolSpanData is recorded by PostToolUse/PostToolUseFailure for later use by Stop.
 type ToolSpanData struct {
-	ToolName     string                 `json:"tool_name"`
-	ToolUseID    string                 `json:"tool_use_id"`
-	ToolInput    map[string]interface{} `json:"tool_input,omitempty"`
-	ToolResponse interface{}            `json:"tool_response,omitempty"`
-	Timestamp    time.Time              `json:"timestamp"`
+	ToolName       string                 `json:"tool_name"`
+	ToolUseID      string                 `json:"tool_use_id"`
+	ToolInput      map[string]interface{} `json:"tool_input,omitempty"`
+	ToolResponse   interface{}            `json:"tool_response,omitempty"`
+	Timestamp      time.Time              `json:"timestamp"`
+	Error          string                 `json:"error,omitempty"`
+	IsInterrupt    bool                   `json:"is_interrupt,omitempty"`
+	HookEventName  string                 `json:"hook_event_name,omitempty"`
+	PermissionMode string                 `json:"permission_mode,omitempty"`
+	AgentID        string                 `json:"agent_id,omitempty"`
+	AgentType      string                 `json:"agent_type,omitempty"`
 }
 
 // PendingSubagent holds parsed subagent data awaiting export at parent Stop time.

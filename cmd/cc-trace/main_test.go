@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"cc-trace/internal/hook"
 	"cc-trace/internal/logging"
@@ -344,6 +345,7 @@ func TestHandleSessionStart_ExistingSession_Rotates(t *testing.T) {
 		LastLine:       20,
 		Epoch:          0,
 		SessionSpanID:  "abc123def456",
+		Updated:        time.Now(),
 	}
 	if err := state.SaveState(sf); err != nil {
 		t.Fatalf("save state: %v", err)
@@ -372,6 +374,7 @@ func TestHandleSessionStart_RotateDisabled_NoOp(t *testing.T) {
 		TurnCount:     5,
 		Epoch:         0,
 		SessionSpanID: "abc123def456",
+		Updated:       time.Now(),
 	}
 	if err := state.SaveState(sf); err != nil {
 		t.Fatalf("save state: %v", err)
@@ -403,6 +406,7 @@ func TestHandleSessionStart_TraceparentSuppresses(t *testing.T) {
 		TurnCount:     5,
 		Epoch:         0,
 		SessionSpanID: "abc123def456",
+		Updated:       time.Now(),
 	}
 	if err := state.SaveState(sf); err != nil {
 		t.Fatalf("save state: %v", err)

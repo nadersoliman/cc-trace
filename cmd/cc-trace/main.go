@@ -66,6 +66,13 @@ func main() {
 
 	// Phase 2: unmarshal into typed struct and dispatch.
 	switch base.HookEventName {
+	case "SessionStart":
+		var input hook.SessionStartPayload
+		if err := json.Unmarshal(data, &input); err != nil {
+			logging.Log("ERROR", fmt.Sprintf("Failed to parse SessionStart: %v", err))
+			os.Exit(0)
+		}
+		handleSessionStart(input)
 	case "PostToolUse":
 		var input hook.PostToolUsePayload
 		if err := json.Unmarshal(data, &input); err != nil {
@@ -449,4 +456,62 @@ func handleSubagentStop(input hook.SubagentStopPayload) {
 	logging.Timing(fmt.Sprintf("total=%dms SubagentStop session=%s agent=%s parse=%dms retries=%d lock=%dms load=%dms save=%dms",
 		time.Since(start).Milliseconds(), sid, input.AgentType,
 		parseDur.Milliseconds(), retries, lockDur.Milliseconds(), loadDur.Milliseconds(), saveDur.Milliseconds()))
+}
+
+func handleSessionStart(input hook.SessionStartPayload) {
+	start := time.Now()
+
+	if !rotateEnabled {
+		logging.Debug("Rotation disabled, skipping SessionStart")
+		return
+	}
+	if os.Getenv("TRACEPARENT") != "" {
+		logging.Debug("TRACEPARENT set, skipping SessionStart rotation")
+		return
+	}
+	if input.SessionID == "" {
+		logging.Debug("No session_id in SessionStart, skipping")
+		return
+	}
+
+	lockStart := time.Now()
+	if !state.AcquireLock() {
+		logging.Debug("Lock held, skipping SessionStart")
+		return
+	}
+	defer state.ReleaseLock()
+	lockDur := time.Since(lockStart)
+
+	loadStart := time.Now()
+	sf := state.LoadState()
+	loadDur := time.Since(loadStart)
+
+	ss, ok := sf.Sessions[input.SessionID]
+	if !ok {
+		// Brand new session — initialize at epoch 0, no rotation needed.
+		sf.Sessions[input.SessionID] = &hook.SessionState{
+			TranscriptPath: input.TranscriptPath,
+			CWD:            input.CWD,
+			Updated:        time.Now(),
+		}
+	} else {
+		// Existing session — rotate trace.
+		ss.Epoch++
+		ss.SessionSpanID = ""
+		ss.Updated = time.Now()
+	}
+
+	saveStart := time.Now()
+	if err := state.SaveState(sf); err != nil {
+		logging.Log("ERROR", fmt.Sprintf("Failed to save state: %v", err))
+	}
+	saveDur := time.Since(saveStart)
+
+	sid := input.SessionID
+	if len(sid) > 8 {
+		sid = sid[:8]
+	}
+	logging.Timing(fmt.Sprintf("total=%dms SessionStart session=%s source=%s lock=%dms load=%dms save=%dms",
+		time.Since(start).Milliseconds(), sid, input.Source,
+		lockDur.Milliseconds(), loadDur.Milliseconds(), saveDur.Milliseconds()))
 }

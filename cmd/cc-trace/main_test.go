@@ -21,14 +21,14 @@ func fixturePath(t *testing.T, name string) string {
 	return p
 }
 
-// loadFixtureInput reads a JSON fixture file and unmarshals it into a HookInput.
-func loadFixtureInput(t *testing.T, name string) hook.HookInput {
+// loadFixture reads a JSON fixture file and unmarshals it into the given type.
+func loadFixture[T any](t *testing.T, name string) T {
 	t.Helper()
 	data, err := os.ReadFile(fixturePath(t, name))
 	if err != nil {
 		t.Fatalf("read fixture %s: %v", name, err)
 	}
-	var input hook.HookInput
+	var input T
 	if err := json.Unmarshal(data, &input); err != nil {
 		t.Fatalf("unmarshal fixture %s: %v", name, err)
 	}
@@ -73,7 +73,7 @@ func setupTestStateDir(t *testing.T) string {
 func TestHandlePostToolUse_Integration(t *testing.T) {
 	setupTestStateDir(t)
 
-	input := loadFixtureInput(t, "posttooluse_taskupdate.json")
+	input := loadFixture[hook.PostToolUsePayload](t, "posttooluse_taskupdate.json")
 	handlePostToolUse(input)
 
 	sf := state.LoadState()
@@ -95,7 +95,7 @@ func TestHandlePostToolUse_Integration(t *testing.T) {
 func TestHandlePostToolUse_Read(t *testing.T) {
 	setupTestStateDir(t)
 
-	input := loadFixtureInput(t, "posttooluse_read.json")
+	input := loadFixture[hook.PostToolUsePayload](t, "posttooluse_read.json")
 	handlePostToolUse(input)
 
 	sf := state.LoadState()
@@ -111,23 +111,51 @@ func TestHandlePostToolUse_Read(t *testing.T) {
 	}
 }
 
-func TestHandlePostToolUse_Failure(t *testing.T) {
+func TestHandlePostToolUseFailure_Integration(t *testing.T) {
 	setupTestStateDir(t)
 
-	input := loadFixtureInput(t, "posttooluse_failure.json")
-	// PostToolUseFailure routes through handlePostToolUse in main.go's switch.
-	handlePostToolUse(input)
+	input := loadFixture[hook.PostToolUseFailurePayload](t, "posttooluse_failure.json")
+	handlePostToolUseFailure(input)
 
 	sf := state.LoadState()
 	ss, ok := sf.Sessions[input.SessionID]
 	if !ok {
-		t.Fatalf("session %q not found in state after handlePostToolUse (failure)", input.SessionID)
+		t.Fatalf("session %q not found in state after handlePostToolUseFailure", input.SessionID)
 	}
 	if len(ss.ToolSpans) != 1 {
 		t.Fatalf("expected 1 ToolSpan, got %d", len(ss.ToolSpans))
 	}
 	if ss.ToolSpans[0].ToolName != "Bash" {
 		t.Errorf("ToolName = %q, want %q", ss.ToolSpans[0].ToolName, "Bash")
+	}
+}
+
+func TestHandlePostToolUseFailure_StoresFailureFields(t *testing.T) {
+	setupTestStateDir(t)
+
+	input := loadFixture[hook.PostToolUseFailurePayload](t, "posttooluse_failure.json")
+	handlePostToolUseFailure(input)
+
+	sf := state.LoadState()
+	ss, ok := sf.Sessions[input.SessionID]
+	if !ok {
+		t.Fatalf("session %q not found in state", input.SessionID)
+	}
+	if len(ss.ToolSpans) != 1 {
+		t.Fatalf("expected 1 ToolSpan, got %d", len(ss.ToolSpans))
+	}
+	tsd := ss.ToolSpans[0]
+	if tsd.Error != "Exit code 1\nbuild failed" {
+		t.Errorf("Error = %q, want %q", tsd.Error, "Exit code 1\nbuild failed")
+	}
+	if tsd.IsInterrupt != false {
+		t.Errorf("IsInterrupt = %v, want false", tsd.IsInterrupt)
+	}
+	if tsd.HookEventName != "PostToolUseFailure" {
+		t.Errorf("HookEventName = %q, want %q", tsd.HookEventName, "PostToolUseFailure")
+	}
+	if tsd.PermissionMode != "default" {
+		t.Errorf("PermissionMode = %q, want %q", tsd.PermissionMode, "default")
 	}
 }
 
@@ -138,7 +166,7 @@ func TestHandleSubagentStop_Integration(t *testing.T) {
 	tmpDir := t.TempDir()
 	transcriptPath := copyFixtureToDir(t, "transcript_subagent.jsonl", tmpDir)
 
-	input := loadFixtureInput(t, "subagent_stop.json")
+	input := loadFixture[hook.SubagentStopPayload](t, "subagent_stop.json")
 	input.AgentTranscriptPath = transcriptPath
 
 	handleSubagentStop(input)
@@ -170,7 +198,7 @@ func TestHandleStop_Integration(t *testing.T) {
 	tmpDir := t.TempDir()
 	transcriptPath := copyFixtureToDir(t, "transcript_simple.jsonl", tmpDir)
 
-	input := loadFixtureInput(t, "stop_simple.json")
+	input := loadFixture[hook.StopPayload](t, "stop_simple.json")
 	input.TranscriptPath = transcriptPath
 
 	handleStop(input)
@@ -195,7 +223,7 @@ func TestHandlePostToolUse_TimingOutput(t *testing.T) {
 	dir := setupTestStateDir(t)
 	logging.InitTiming(true)
 
-	input := loadFixtureInput(t, "posttooluse_read.json")
+	input := loadFixture[hook.PostToolUsePayload](t, "posttooluse_read.json")
 	handlePostToolUse(input)
 
 	data, err := os.ReadFile(filepath.Join(dir, "test.log"))
@@ -220,7 +248,7 @@ func TestFullFlow(t *testing.T) {
 	sessionID := "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
 	// Step 1: handlePostToolUse with a Read tool event.
-	readInput := loadFixtureInput(t, "posttooluse_read.json")
+	readInput := loadFixture[hook.PostToolUsePayload](t, "posttooluse_read.json")
 	handlePostToolUse(readInput)
 
 	// Verify tool was recorded.
@@ -236,7 +264,7 @@ func TestFullFlow(t *testing.T) {
 	// Step 2: handleSubagentStop with subagent transcript.
 	tmpDir := t.TempDir()
 	subagentTranscript := copyFixtureToDir(t, "transcript_subagent.jsonl", tmpDir)
-	subagentInput := loadFixtureInput(t, "subagent_stop.json")
+	subagentInput := loadFixture[hook.SubagentStopPayload](t, "subagent_stop.json")
 	subagentInput.AgentTranscriptPath = subagentTranscript
 	handleSubagentStop(subagentInput)
 
@@ -254,7 +282,7 @@ func TestFullFlow(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:1")
 
 	toolsTranscript := copyFixtureToDir(t, "transcript_tools.jsonl", tmpDir)
-	stopInput := loadFixtureInput(t, "stop_simple.json")
+	stopInput := loadFixture[hook.StopPayload](t, "stop_simple.json")
 	stopInput.TranscriptPath = toolsTranscript
 	handleStop(stopInput)
 

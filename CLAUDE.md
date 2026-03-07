@@ -43,11 +43,15 @@ Session Root
 | Path | Purpose |
 |------|---------|
 | `cmd/cc-trace/main.go` | Entry point, stdin parsing, event dispatch |
-| `internal/hook/types.go` | Data structures (HookInput, Turn, ToolCall, SessionState) |
+| `internal/hook/types.go` | Data structures (HookBase, typed payloads, Turn, ToolCall, SessionState) |
 | `internal/logging/logging.go` | Debug and error logging to file |
 | `internal/state/state.go` | State file load/save with file locking |
 | `internal/transcript/parse.go` | JSONL transcript parsing into turns |
-| `internal/tracer/tracer.go` | OTel SDK init, span creation, deterministic trace IDs |
+| `internal/tracer/tracer.go` | OTel SDK init, session span orchestration, deterministic trace IDs |
+| `internal/tracer/stop.go` | Turn/LLM/tool span creation from transcript |
+| `internal/tracer/posttooluse.go` | Tool span attribute building for successful calls |
+| `internal/tracer/posttoolusefailure.go` | Tool span attribute building for failed calls |
+| `internal/tracer/subagentstop.go` | Subagent span creation from parsed subagent transcript |
 
 ## Environment Variables
 

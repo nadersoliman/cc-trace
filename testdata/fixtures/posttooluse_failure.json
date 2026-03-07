@@ -2,6 +2,7 @@
   "session_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
   "transcript_path": "/home/testuser/.claude/projects/test-project/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl",
   "cwd": "/home/testuser/projects/cc-trace",
+  "permission_mode": "default",
   "hook_event_name": "PostToolUseFailure",
   "tool_name": "Bash",
   "tool_input": {

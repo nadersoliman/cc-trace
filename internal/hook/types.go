@@ -2,32 +2,66 @@ package hook
 
 import "time"
 
-// HookInput represents the JSON received on stdin from Claude Code hooks.
-type HookInput struct {
+// HookBase contains fields shared across all hook event payloads.
+type HookBase struct {
 	SessionID      string `json:"session_id"`
 	TranscriptPath string `json:"transcript_path"`
 	CWD            string `json:"cwd"`
+	PermissionMode string `json:"permission_mode"`
 	HookEventName  string `json:"hook_event_name"`
-
-	// PostToolUse fields
-	ToolName     string                 `json:"tool_name,omitempty"`
-	ToolInput    map[string]interface{} `json:"tool_input,omitempty"`
-	ToolResponse interface{}            `json:"tool_response,omitempty"`
-	ToolUseID    string                 `json:"tool_use_id,omitempty"`
-
-	// SubagentStop fields
-	AgentID             string `json:"agent_id,omitempty"`
-	AgentType           string `json:"agent_type,omitempty"`
-	AgentTranscriptPath string `json:"agent_transcript_path,omitempty"`
 }
 
-// ToolSpanData is recorded by PostToolUse for later use by Stop.
-type ToolSpanData struct {
+// PostToolUsePayload is the schema for PostToolUse hook events.
+type PostToolUsePayload struct {
+	HookBase
 	ToolName     string                 `json:"tool_name"`
-	ToolUseID    string                 `json:"tool_use_id"`
 	ToolInput    map[string]interface{} `json:"tool_input,omitempty"`
 	ToolResponse interface{}            `json:"tool_response,omitempty"`
-	Timestamp    time.Time              `json:"timestamp"`
+	ToolUseID    string                 `json:"tool_use_id"`
+}
+
+// PostToolUseFailurePayload is the schema for PostToolUseFailure hook events.
+type PostToolUseFailurePayload struct {
+	HookBase
+	ToolName    string                 `json:"tool_name"`
+	ToolInput   map[string]interface{} `json:"tool_input,omitempty"`
+	ToolUseID   string                 `json:"tool_use_id"`
+	Error       string                 `json:"error"`
+	IsInterrupt bool                   `json:"is_interrupt"`
+	AgentID     string                 `json:"agent_id,omitempty"`
+	AgentType   string                 `json:"agent_type,omitempty"`
+}
+
+// SubagentStopPayload is the schema for SubagentStop hook events.
+type SubagentStopPayload struct {
+	HookBase
+	AgentID             string `json:"agent_id"`
+	AgentType           string `json:"agent_type"`
+	AgentTranscriptPath string `json:"agent_transcript_path"`
+	LastAssistantMsg    string `json:"last_assistant_message"`
+	StopHookActive      bool   `json:"stop_hook_active"`
+}
+
+// StopPayload is the schema for Stop hook events.
+type StopPayload struct {
+	HookBase
+	StopHookActive   bool   `json:"stop_hook_active"`
+	LastAssistantMsg string `json:"last_assistant_message"`
+}
+
+// ToolSpanData is recorded by PostToolUse/PostToolUseFailure for later use by Stop.
+type ToolSpanData struct {
+	ToolName       string                 `json:"tool_name"`
+	ToolUseID      string                 `json:"tool_use_id"`
+	ToolInput      map[string]interface{} `json:"tool_input,omitempty"`
+	ToolResponse   interface{}            `json:"tool_response,omitempty"`
+	Timestamp      time.Time              `json:"timestamp"`
+	Error          string                 `json:"error,omitempty"`
+	IsInterrupt    bool                   `json:"is_interrupt,omitempty"`
+	HookEventName  string                 `json:"hook_event_name,omitempty"`
+	PermissionMode string                 `json:"permission_mode,omitempty"`
+	AgentID        string                 `json:"agent_id,omitempty"`
+	AgentType      string                 `json:"agent_type,omitempty"`
 }
 
 // PendingSubagent holds parsed subagent data awaiting export at parent Stop time.

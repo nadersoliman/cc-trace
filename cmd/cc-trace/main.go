@@ -51,27 +51,51 @@ func main() {
 		os.Exit(0)
 	}
 
-	var input hook.HookInput
-	if err := json.Unmarshal(data, &input); err != nil {
+	// Phase 1: unmarshal base fields to determine event type.
+	var base hook.HookBase
+	if err := json.Unmarshal(data, &base); err != nil {
 		logging.Log("ERROR", fmt.Sprintf("Failed to parse stdin: %v", err))
 		os.Exit(0)
 	}
 
 	if dumpEnabled {
-		dumpPayload(input.HookEventName, input.SessionID, data)
+		dumpPayload(base.HookEventName, base.SessionID, data)
 	}
 
-	logging.Debug(fmt.Sprintf("Event: %s, Session: %s", input.HookEventName, input.SessionID))
+	logging.Debug(fmt.Sprintf("Event: %s, Session: %s", base.HookEventName, base.SessionID))
 
-	switch input.HookEventName {
-	case "PostToolUse", "PostToolUseFailure":
+	// Phase 2: unmarshal into typed struct and dispatch.
+	switch base.HookEventName {
+	case "PostToolUse":
+		var input hook.PostToolUsePayload
+		if err := json.Unmarshal(data, &input); err != nil {
+			logging.Log("ERROR", fmt.Sprintf("Failed to parse PostToolUse: %v", err))
+			os.Exit(0)
+		}
 		handlePostToolUse(input)
+	case "PostToolUseFailure":
+		var input hook.PostToolUseFailurePayload
+		if err := json.Unmarshal(data, &input); err != nil {
+			logging.Log("ERROR", fmt.Sprintf("Failed to parse PostToolUseFailure: %v", err))
+			os.Exit(0)
+		}
+		handlePostToolUseFailure(input)
 	case "SubagentStop":
+		var input hook.SubagentStopPayload
+		if err := json.Unmarshal(data, &input); err != nil {
+			logging.Log("ERROR", fmt.Sprintf("Failed to parse SubagentStop: %v", err))
+			os.Exit(0)
+		}
 		handleSubagentStop(input)
 	case "Stop":
+		var input hook.StopPayload
+		if err := json.Unmarshal(data, &input); err != nil {
+			logging.Log("ERROR", fmt.Sprintf("Failed to parse Stop: %v", err))
+			os.Exit(0)
+		}
 		handleStop(input)
 	default:
-		logging.Debug(fmt.Sprintf("Unknown event: %s", input.HookEventName))
+		logging.Debug(fmt.Sprintf("Unknown event: %s", base.HookEventName))
 	}
 }
 
@@ -125,7 +149,7 @@ func dumpTranscript(transcriptPath, sessionID string) {
 	}
 }
 
-func handlePostToolUse(input hook.HookInput) {
+func handlePostToolUse(input hook.PostToolUsePayload) {
 	start := time.Now()
 
 	if input.SessionID == "" {
@@ -180,7 +204,61 @@ func handlePostToolUse(input hook.HookInput) {
 		lockDur.Milliseconds(), loadDur.Milliseconds(), saveDur.Milliseconds()))
 }
 
-func handleStop(input hook.HookInput) {
+func handlePostToolUseFailure(input hook.PostToolUseFailurePayload) {
+	start := time.Now()
+
+	if input.SessionID == "" {
+		logging.Debug("No session_id in PostToolUseFailure, skipping")
+		return
+	}
+
+	lockStart := time.Now()
+	if !state.AcquireLock() {
+		logging.Debug("Lock held, skipping PostToolUseFailure")
+		return
+	}
+	defer state.ReleaseLock()
+	lockDur := time.Since(lockStart)
+
+	loadStart := time.Now()
+	sf := state.LoadState()
+	loadDur := time.Since(loadStart)
+
+	ss, ok := sf.Sessions[input.SessionID]
+	if !ok {
+		ss = &hook.SessionState{
+			TranscriptPath: input.TranscriptPath,
+			CWD:            input.CWD,
+		}
+		sf.Sessions[input.SessionID] = ss
+	}
+
+	ss.ToolSpans = append(ss.ToolSpans, hook.ToolSpanData{
+		ToolName:  input.ToolName,
+		ToolUseID: input.ToolUseID,
+		ToolInput: input.ToolInput,
+		Timestamp: time.Now(),
+	})
+	ss.Updated = time.Now()
+
+	saveStart := time.Now()
+	if err := state.SaveState(sf); err != nil {
+		logging.Log("ERROR", fmt.Sprintf("Failed to save state: %v", err))
+	}
+	saveDur := time.Since(saveStart)
+
+	logging.Debug(fmt.Sprintf("Recorded tool failure: %s (%s)", input.ToolName, input.ToolUseID))
+
+	sid := input.SessionID
+	if len(sid) > 8 {
+		sid = sid[:8]
+	}
+	logging.Timing(fmt.Sprintf("total=%dms PostToolUseFailure session=%s tool=%s lock=%dms load=%dms save=%dms",
+		time.Since(start).Milliseconds(), sid, input.ToolName,
+		lockDur.Milliseconds(), loadDur.Milliseconds(), saveDur.Milliseconds()))
+}
+
+func handleStop(input hook.StopPayload) {
 	start := time.Now()
 
 	// Find transcript path from input or state.
@@ -290,7 +368,7 @@ func handleStop(input hook.HookInput) {
 		saveDur.Milliseconds(), len(turns)))
 }
 
-func handleSubagentStop(input hook.HookInput) {
+func handleSubagentStop(input hook.SubagentStopPayload) {
 	start := time.Now()
 
 	if input.SessionID == "" || input.AgentTranscriptPath == "" {

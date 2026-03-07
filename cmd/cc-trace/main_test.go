@@ -311,3 +311,113 @@ func TestFullFlow(t *testing.T) {
 		t.Errorf("LastLine = %d, want 7", ss.LastLine)
 	}
 }
+
+func TestHandleSessionStart_NewSession(t *testing.T) {
+	setupTestStateDir(t)
+	rotateEnabled = true
+	defer func() { rotateEnabled = false }()
+
+	input := loadFixture[hook.SessionStartPayload](t, "sessionstart_resume.json")
+	handleSessionStart(input)
+
+	sf := state.LoadState()
+	ss, ok := sf.Sessions[input.SessionID]
+	if !ok {
+		t.Fatalf("session %q not found in state after handleSessionStart", input.SessionID)
+	}
+	// New session: epoch stays 0, no rotation.
+	if ss.Epoch != 0 {
+		t.Errorf("Epoch = %d, want 0 for new session", ss.Epoch)
+	}
+}
+
+func TestHandleSessionStart_ExistingSession_Rotates(t *testing.T) {
+	setupTestStateDir(t)
+	rotateEnabled = true
+	defer func() { rotateEnabled = false }()
+
+	// Pre-seed state with an existing session.
+	sf := state.LoadState()
+	sf.Sessions["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"] = &hook.SessionState{
+		TranscriptPath: "/some/path.jsonl",
+		TurnCount:      5,
+		LastLine:       20,
+		Epoch:          0,
+		SessionSpanID:  "abc123def456",
+	}
+	if err := state.SaveState(sf); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	input := loadFixture[hook.SessionStartPayload](t, "sessionstart_resume.json")
+	handleSessionStart(input)
+
+	sf = state.LoadState()
+	ss := sf.Sessions[input.SessionID]
+	if ss.Epoch != 1 {
+		t.Errorf("Epoch = %d, want 1 after rotation", ss.Epoch)
+	}
+	if ss.SessionSpanID != "" {
+		t.Errorf("SessionSpanID = %q, want empty after rotation", ss.SessionSpanID)
+	}
+}
+
+func TestHandleSessionStart_RotateDisabled_NoOp(t *testing.T) {
+	setupTestStateDir(t)
+	rotateEnabled = false
+
+	// Pre-seed state.
+	sf := state.LoadState()
+	sf.Sessions["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"] = &hook.SessionState{
+		TurnCount:     5,
+		Epoch:         0,
+		SessionSpanID: "abc123def456",
+	}
+	if err := state.SaveState(sf); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	input := loadFixture[hook.SessionStartPayload](t, "sessionstart_resume.json")
+	handleSessionStart(input)
+
+	sf = state.LoadState()
+	ss := sf.Sessions[input.SessionID]
+	// Should NOT rotate when flag is off.
+	if ss.Epoch != 0 {
+		t.Errorf("Epoch = %d, want 0 when rotate disabled", ss.Epoch)
+	}
+	if ss.SessionSpanID != "abc123def456" {
+		t.Errorf("SessionSpanID = %q, want unchanged", ss.SessionSpanID)
+	}
+}
+
+func TestHandleSessionStart_TraceparentSuppresses(t *testing.T) {
+	setupTestStateDir(t)
+	rotateEnabled = true
+	defer func() { rotateEnabled = false }()
+	t.Setenv("TRACEPARENT", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
+
+	// Pre-seed state.
+	sf := state.LoadState()
+	sf.Sessions["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"] = &hook.SessionState{
+		TurnCount:     5,
+		Epoch:         0,
+		SessionSpanID: "abc123def456",
+	}
+	if err := state.SaveState(sf); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	input := loadFixture[hook.SessionStartPayload](t, "sessionstart_resume.json")
+	handleSessionStart(input)
+
+	sf = state.LoadState()
+	ss := sf.Sessions[input.SessionID]
+	// TRACEPARENT set: should NOT rotate.
+	if ss.Epoch != 0 {
+		t.Errorf("Epoch = %d, want 0 when TRACEPARENT set", ss.Epoch)
+	}
+	if ss.SessionSpanID != "abc123def456" {
+		t.Errorf("SessionSpanID = %q, want unchanged when TRACEPARENT set", ss.SessionSpanID)
+	}
+}

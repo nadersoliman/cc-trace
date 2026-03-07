@@ -582,6 +582,79 @@ func TestExportSessionTrace_Rotation(t *testing.T) {
 	}
 }
 
+func TestExportSessionTrace_ToolFailureAttributes(t *testing.T) {
+	exporter, shutdown, flush := setupTestTracer(t)
+	defer shutdown()
+
+	sessionID := "test-session-tool-failure"
+	now := time.Now()
+
+	turns := []hook.Turn{
+		{
+			Number:    1,
+			Model:     "claude-sonnet-4-20250514",
+			StartTime: now,
+			EndTime:   now.Add(3 * time.Second),
+			ToolCalls: []hook.ToolCall{
+				{
+					Name:      "WebFetch",
+					ID:        "toolu_fail_001",
+					Success:   false,
+					StartTime: now.Add(500 * time.Millisecond),
+					EndTime:   now.Add(1 * time.Second),
+				},
+			},
+		},
+	}
+
+	toolSpanData := []hook.ToolSpanData{
+		{
+			ToolName:       "WebFetch",
+			ToolUseID:      "toolu_fail_001",
+			Error:          "unable to verify the first certificate",
+			IsInterrupt:    false,
+			HookEventName:  "PostToolUseFailure",
+			PermissionMode: "acceptEdits",
+			AgentID:        "agent-sub-001",
+			AgentType:      "general-purpose",
+		},
+	}
+
+	ss := &hook.SessionState{}
+	ExportSessionTrace(sessionID, turns, toolSpanData, nil, ss, false)
+
+	flush()
+	spans := exporter.GetSpans()
+
+	toolSpan := findSpan(spans, "Tool: WebFetch")
+	if toolSpan == nil {
+		t.Fatal("expected 'Tool: WebFetch' span")
+	}
+
+	// Verify failure attributes
+	if v := getAttr(toolSpan, "error"); v != "unable to verify the first certificate" {
+		t.Errorf("error = %v, want 'unable to verify the first certificate'", v)
+	}
+	if v := getAttr(toolSpan, "is_interrupt"); v != false {
+		t.Errorf("is_interrupt = %v, want false", v)
+	}
+	if v := getAttr(toolSpan, "hook.event_name"); v != "PostToolUseFailure" {
+		t.Errorf("hook.event_name = %v, want PostToolUseFailure", v)
+	}
+	if v := getAttr(toolSpan, "permission_mode"); v != "acceptEdits" {
+		t.Errorf("permission_mode = %v, want acceptEdits", v)
+	}
+	if v := getAttr(toolSpan, "agent.id"); v != "agent-sub-001" {
+		t.Errorf("agent.id = %v, want agent-sub-001", v)
+	}
+	if v := getAttr(toolSpan, "agent.type"); v != "general-purpose" {
+		t.Errorf("agent.type = %v, want general-purpose", v)
+	}
+	if v := getAttr(toolSpan, "tool.success"); v != false {
+		t.Errorf("tool.success = %v, want false", v)
+	}
+}
+
 func TestExportSessionTrace_TraceparentSuppressesRotation(t *testing.T) {
 	exporter, shutdown, flush := setupTestTracer(t)
 	defer shutdown()

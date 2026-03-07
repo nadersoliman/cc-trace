@@ -54,7 +54,22 @@ func createTurnSpans(tracer trace.Tracer, sessionCtx context.Context, turns []ho
 
 		// Tool spans.
 		for _, tc := range turn.ToolCalls {
-			attrs := buildToolAttrs(tc, toolSpanData)
+			var attrs []attribute.KeyValue
+
+			// Check if we have failure data for this tool call.
+			var failureTSD *hook.ToolSpanData
+			for i, tsd := range toolSpanData {
+				if tsd.ToolUseID == tc.ID && tsd.Error != "" {
+					failureTSD = &toolSpanData[i]
+					break
+				}
+			}
+
+			if failureTSD != nil {
+				attrs = buildToolFailureAttrs(tc, *failureTSD)
+			} else {
+				attrs = buildToolAttrs(tc, toolSpanData)
+			}
 
 			_, toolSpan := tracer.Start(turnCtx, fmt.Sprintf("Tool: %s", tc.Name),
 				trace.WithTimestamp(tc.StartTime),

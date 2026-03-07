@@ -1,4 +1,8 @@
 {
+  "enabledPlugins": {
+    "superpowers-chrome@superpowers-marketplace": true,
+    "superpowers-dev@superpowers-marketplace": true
+  },
   "env": {
     "OTEL_SERVICE_NAME": "project@cc-trace",
     "OTEL_RESOURCE_ATTRIBUTES": "project.name=cc-trace,project.agent=claude"
@@ -6,95 +10,9 @@
   "permissions": {
     "allow": [
       "Bash",
-      "Edit(~/projects/**)",
       "Glob",
       "Grep",
       "Read(~/projects/**)",
-      "Write(~/projects/**)"
-    ],
-    "deny": [
-      "Read(./.entire/metadata/**)"
     ]
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "entire hooks claude-code post-task"
-          }
-        ]
-      },
-      {
-        "matcher": "TodoWrite",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "entire hooks claude-code post-todo"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "entire hooks claude-code pre-task"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "entire hooks claude-code session-end"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "entire hooks claude-code session-start"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "entire hooks claude-code stop"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "entire hooks claude-code user-prompt-submit"
-          }
-        ]
-      }
-    ]
-  },
-  "enabledPlugins": {
-    "superpowers-chrome@superpowers-marketplace": true,
-    "superpowers-dev@superpowers-marketplace": true
   }
 }

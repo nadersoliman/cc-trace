@@ -66,9 +66,10 @@ The attribute name should reflect the **original scope** of the data. Don't re-s
 | Tool | `tool.name` | string | Hook payload `tool_name` |
 | Tool | `tool.use_id` | string | Hook payload `tool_use_id` |
 | Tool | `tool.success` | bool | Hook event type |
+| Tool | `tool.input` | string | Hook payload `tool_input` (JSON-stringified, truncated to 4096) |
+| Tool | `tool.response` | string | Hook payload `tool_response` (JSON-stringified, truncated to 4096) |
 | Tool | `error` | string | PostToolUseFailure payload `error` |
 | Tool | `is_interrupt` | bool | PostToolUseFailure payload `is_interrupt` |
-| Tool | `tool.input` | string | Hook payload `tool_input` (JSON-stringified, truncated) |
 | Tool | `hook.event_name` | string | Hook payload `hook_event_name` |
 | Tool | `permission_mode` | string | Hook payload `permission_mode` |
 | Tool | `agent.id` | string | PostToolUseFailure payload `agent_id` (subagent context) |

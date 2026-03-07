@@ -12,7 +12,7 @@
       "Bash",
       "Glob",
       "Grep",
-      "Read(~/projects/**)",
+      "Read(~/projects/**)"
     ]
   }
 }

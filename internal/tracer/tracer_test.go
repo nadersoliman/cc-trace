@@ -77,9 +77,9 @@ func TestTraceIDDeterministic(t *testing.T) {
 	sessionA := "session-abc-123"
 	sessionB := "session-xyz-789"
 
-	tidA1 := traceIDFromSession(sessionA)
-	tidA2 := traceIDFromSession(sessionA)
-	tidB := traceIDFromSession(sessionB)
+	tidA1 := traceIDFromSession(sessionA, 0)
+	tidA2 := traceIDFromSession(sessionA, 0)
+	tidB := traceIDFromSession(sessionB, 0)
 
 	if tidA1 != tidA2 {
 		t.Errorf("same session ID produced different trace IDs: %s vs %s", tidA1, tidA2)
@@ -139,7 +139,7 @@ func TestExportSessionTrace_SingleTurn(t *testing.T) {
 	}
 
 	ss := &hook.SessionState{}
-	ExportSessionTrace(sessionID, turns, nil, nil, ss)
+	ExportSessionTrace(sessionID, turns, nil, nil, ss, false)
 
 	flush()
 	spans := exporter.GetSpans()
@@ -225,7 +225,7 @@ func TestExportSessionTrace_WithTools(t *testing.T) {
 	}
 
 	ss := &hook.SessionState{}
-	ExportSessionTrace(sessionID, turns, nil, nil, ss)
+	ExportSessionTrace(sessionID, turns, nil, nil, ss, false)
 
 	flush()
 	spans := exporter.GetSpans()
@@ -312,7 +312,7 @@ func TestExportSessionTrace_WithSubagent(t *testing.T) {
 	}
 
 	ss := &hook.SessionState{}
-	ExportSessionTrace(sessionID, turns, nil, pendingSubagents, ss)
+	ExportSessionTrace(sessionID, turns, nil, pendingSubagents, ss, false)
 
 	flush()
 	spans := exporter.GetSpans()
@@ -350,7 +350,7 @@ func TestExportSessionTrace_IncrementalExport(t *testing.T) {
 	}
 
 	ss := &hook.SessionState{}
-	ExportSessionTrace(sessionID, turns1, nil, nil, ss)
+	ExportSessionTrace(sessionID, turns1, nil, nil, ss, false)
 
 	flush()
 	savedSpanID := ss.SessionSpanID
@@ -371,7 +371,7 @@ func TestExportSessionTrace_IncrementalExport(t *testing.T) {
 		},
 	}
 
-	ExportSessionTrace(sessionID, turns2, nil, nil, ss)
+	ExportSessionTrace(sessionID, turns2, nil, nil, ss, false)
 
 	flush()
 
@@ -411,7 +411,7 @@ func TestExportSessionTrace_SpanAttributes(t *testing.T) {
 	}
 
 	ss := &hook.SessionState{}
-	ExportSessionTrace(sessionID, turns, nil, nil, ss)
+	ExportSessionTrace(sessionID, turns, nil, nil, ss, false)
 
 	flush()
 	spans := exporter.GetSpans()
@@ -468,7 +468,7 @@ func TestBatchFlush_SpansVisibleAfterFlush(t *testing.T) {
 		},
 	}
 	ss := &hook.SessionState{}
-	ExportSessionTrace(sessionID, turns, nil, nil, ss)
+	ExportSessionTrace(sessionID, turns, nil, nil, ss, false)
 
 	// Flush must be called to see spans with batch processor
 	flush()
@@ -476,5 +476,173 @@ func TestBatchFlush_SpansVisibleAfterFlush(t *testing.T) {
 	spans := exporter.GetSpans()
 	if len(spans) != 3 {
 		t.Fatalf("expected 3 spans after flush, got %d", len(spans))
+	}
+}
+
+func TestTraceIDWithEpoch(t *testing.T) {
+	sessionID := "test-session-epoch"
+
+	// Epoch 0 produces a valid, deterministic trace ID.
+	tid0a := traceIDFromSession(sessionID, 0)
+	tid0b := traceIDFromSession(sessionID, 0)
+	if tid0a != tid0b {
+		t.Errorf("epoch 0 should be deterministic")
+	}
+
+	// Different epochs produce different trace IDs.
+	tid1 := traceIDFromSession(sessionID, 1)
+	tid2 := traceIDFromSession(sessionID, 2)
+
+	if tid0a == tid1 {
+		t.Errorf("epoch 0 and 1 should produce different trace IDs")
+	}
+	if tid1 == tid2 {
+		t.Errorf("epoch 1 and 2 should produce different trace IDs")
+	}
+
+	// Same epoch is deterministic.
+	tid1b := traceIDFromSession(sessionID, 1)
+	if tid1 != tid1b {
+		t.Errorf("same epoch should produce same trace ID")
+	}
+}
+
+func TestExportSessionTrace_Rotation(t *testing.T) {
+	exporter, shutdown, flush := setupTestTracer(t)
+	defer shutdown()
+
+	sessionID := "test-session-rotation"
+	now := time.Now()
+
+	// First conversation: epoch 0
+	turns1 := []hook.Turn{
+		{
+			Number:    1,
+			Model:     "claude-sonnet-4-20250514",
+			StartTime: now,
+			EndTime:   now.Add(2 * time.Second),
+		},
+	}
+
+	ss := &hook.SessionState{}
+	ExportSessionTrace(sessionID, turns1, nil, nil, ss, true)
+	flush()
+
+	spans1 := exporter.GetSpans()
+	// Should have Session + Turn + LLM Response
+	if len(spans1) != 3 {
+		t.Fatalf("first export: expected 3 spans, got %d", len(spans1))
+	}
+	firstTraceID := spans1[0].SpanContext.TraceID()
+	firstSessionSpanID := ss.SessionSpanID
+	if firstSessionSpanID == "" {
+		t.Fatal("expected SessionSpanID to be set after first export")
+	}
+
+	// Simulate handleStop: increment epoch, clear span ID
+	ss.Epoch++
+	ss.SessionSpanID = ""
+
+	exporter.Reset()
+
+	// Second conversation: epoch 1
+	turns2 := []hook.Turn{
+		{
+			Number:    2,
+			Model:     "claude-sonnet-4-20250514",
+			StartTime: now.Add(10 * time.Second),
+			EndTime:   now.Add(12 * time.Second),
+		},
+	}
+
+	ExportSessionTrace(sessionID, turns2, nil, nil, ss, true)
+	flush()
+
+	spans2 := exporter.GetSpans()
+	// Should have NEW Session + Turn + LLM Response
+	if len(spans2) != 3 {
+		t.Fatalf("second export: expected 3 spans, got %d", len(spans2))
+	}
+	secondTraceID := spans2[0].SpanContext.TraceID()
+
+	// Trace IDs must differ between epochs.
+	if firstTraceID == secondTraceID {
+		t.Errorf("rotated trace IDs should differ: both are %s", firstTraceID)
+	}
+
+	// New Session span should exist.
+	sessionSpans := findSpans(spans2, "Session")
+	if len(sessionSpans) != 1 {
+		t.Fatalf("expected 1 Session span in rotated export, got %d", len(sessionSpans))
+	}
+
+	// Session span should have same session.id attribute.
+	if v := getAttr(&sessionSpans[0], "session.id"); v != sessionID {
+		t.Errorf("session.id = %v, want %s", v, sessionID)
+	}
+}
+
+func TestExportSessionTrace_TraceparentSuppressesRotation(t *testing.T) {
+	exporter, shutdown, flush := setupTestTracer(t)
+	defer shutdown()
+
+	// Set TRACEPARENT -- rotation should be suppressed.
+	t.Setenv("TRACEPARENT", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
+
+	sessionID := "test-session-traceparent-rotation"
+	now := time.Now()
+
+	// First export with rotate=true but TRACEPARENT set.
+	turns1 := []hook.Turn{
+		{
+			Number:    1,
+			Model:     "claude-sonnet-4-20250514",
+			StartTime: now,
+			EndTime:   now.Add(2 * time.Second),
+		},
+	}
+
+	ss := &hook.SessionState{}
+	ExportSessionTrace(sessionID, turns1, nil, nil, ss, true)
+	flush()
+
+	spans1 := exporter.GetSpans()
+	if len(spans1) != 3 {
+		t.Fatalf("first export: expected 3 spans, got %d", len(spans1))
+	}
+	firstTraceID := spans1[0].SpanContext.TraceID()
+	savedSpanID := ss.SessionSpanID
+
+	exporter.Reset()
+
+	// Second export: same session state (caller would NOT increment epoch
+	// because TRACEPARENT is set), rotate=true still passed but should be ignored.
+	turns2 := []hook.Turn{
+		{
+			Number:    2,
+			Model:     "claude-sonnet-4-20250514",
+			StartTime: now.Add(5 * time.Second),
+			EndTime:   now.Add(7 * time.Second),
+		},
+	}
+
+	ExportSessionTrace(sessionID, turns2, nil, nil, ss, true)
+	flush()
+
+	spans2 := exporter.GetSpans()
+
+	// Trace ID should be the TRACEPARENT's trace ID, same both times.
+	secondTraceID := spans2[0].SpanContext.TraceID()
+	if firstTraceID != secondTraceID {
+		t.Errorf("TRACEPARENT should keep same trace ID: got %s and %s", firstTraceID, secondTraceID)
+	}
+
+	// SessionSpanID should be reused (no rotation), so no new Session span.
+	if ss.SessionSpanID != savedSpanID {
+		t.Errorf("SessionSpanID should be reused under TRACEPARENT: was %s, now %s", savedSpanID, ss.SessionSpanID)
+	}
+	sessionSpans := findSpans(spans2, "Session")
+	if len(sessionSpans) != 0 {
+		t.Errorf("expected 0 Session spans (reusing existing), got %d", len(sessionSpans))
 	}
 }

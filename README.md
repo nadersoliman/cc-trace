@@ -65,6 +65,7 @@ Add to your global Claude Code settings (`~/.claude/settings.json`):
 | `CC_TRACE_DEBUG` | `false` | Debug log to `~/.claude/state/cc_trace.log` |
 | `CC_TRACE_TIMING` | `false` | Phase-level timing logs to `~/.claude/state/cc_trace.log` |
 | `CC_TRACE_DUMP` | `false` | Dump raw hook payloads and transcripts to `/tmp/cc-trace/dumps/` |
+| `CC_TRACE_ROTATE` | `false` | Rotate trace ID per resume. Each conversation gets its own trace, preventing long-lived sessions from outliving backend retention. Search by `session.id` attribute to find all segments. Ignored when `TRACEPARENT` is set -- the external trace owns the trace ID. |
 | `TRACEPARENT` | — | [W3C Trace Context](https://www.w3.org/TR/trace-context/) parent. When set, the session trace becomes a child of the external trace (e.g. a CI pipeline span). Format: `00-<trace_id>-<span_id>-<flags>` |
 
 Set these per-project in `.claude/settings.json` under `"env"`, or export them in your shell:

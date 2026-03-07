@@ -65,6 +65,10 @@ All configuration follows the [OTel environment variable specification](https://
 
 **Note:** The hook previously used gRPC (`otlptracegrpc`, port 4317) with a separate `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`. It now uses HTTP/protobuf (`otlptracehttp`) to share the same `OTEL_EXPORTER_OTLP_ENDPOINT` as Claude Code's metrics and logs. Per the OTel spec, the HTTP exporter appends `/v1/traces` to the base endpoint automatically.
 
+## Documentation
+
+See [`docs/CLAUDE.md`](docs/CLAUDE.md) for documentation structure, folder layout, and templates (plans, spikes).
+
 ## Git Conventions
 
 All commits must use the author flag: `--author="Claude Opus 4.6 <noreply@anthropic.com>"`

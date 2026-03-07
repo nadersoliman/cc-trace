@@ -20,6 +20,13 @@ type PostToolUsePayload struct {
 	ToolUseID    string                 `json:"tool_use_id"`
 }
 
+// SessionStartPayload is the schema for SessionStart hook events.
+type SessionStartPayload struct {
+	HookBase
+	Source string `json:"source"` // "startup", "resume", "clear", "compact"
+	Model  string `json:"model"`
+}
+
 // PostToolUseFailurePayload is the schema for PostToolUseFailure hook events.
 type PostToolUseFailurePayload struct {
 	HookBase

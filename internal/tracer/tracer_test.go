@@ -539,7 +539,7 @@ func TestExportSessionTrace_Rotation(t *testing.T) {
 		t.Fatal("expected SessionSpanID to be set after first export")
 	}
 
-	// Simulate handleStop: increment epoch, clear span ID
+	// Simulate handleSessionStart: increment epoch, clear span ID
 	ss.Epoch++
 	ss.SessionSpanID = ""
 

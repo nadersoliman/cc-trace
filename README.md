@@ -47,6 +47,7 @@ Add to your global Claude Code settings (`~/.claude/settings.json`):
 ```jsonc
 {
   "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/cc-trace" }] }],
     "PostToolUse": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/cc-trace" }] }],
     "PostToolUseFailure": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/cc-trace" }] }],
     "SubagentStop": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/cc-trace" }] }],
@@ -65,7 +66,7 @@ Add to your global Claude Code settings (`~/.claude/settings.json`):
 | `CC_TRACE_DEBUG` | `false` | Debug log to `~/.claude/state/cc_trace.log` |
 | `CC_TRACE_TIMING` | `false` | Phase-level timing logs to `~/.claude/state/cc_trace.log` |
 | `CC_TRACE_DUMP` | `false` | Dump raw hook payloads and transcripts to `/tmp/cc-trace/dumps/` |
-| `CC_TRACE_ROTATE` | `false` | Rotate trace ID per resume. Each conversation gets its own trace, preventing long-lived sessions from outliving backend retention. Search by `session.id` attribute to find all segments. Ignored when `TRACEPARENT` is set -- the external trace owns the trace ID. |
+| `CC_TRACE_ROTATE` | `false` | Rotate trace ID per session segment. Each SessionStart (startup/resume/clear/compact) on an existing session creates a new trace, preventing long-lived sessions from outliving backend retention. Search by `session.id` attribute to find all segments. Ignored when `TRACEPARENT` is set -- the external trace owns the trace ID. |
 | `TRACEPARENT` | — | [W3C Trace Context](https://www.w3.org/TR/trace-context/) parent. When set, the session trace becomes a child of the external trace (e.g. a CI pipeline span). Format: `00-<trace_id>-<span_id>-<flags>` |
 
 Set these per-project in `.claude/settings.json` under `"env"`, or export them in your shell:
@@ -82,4 +83,4 @@ Set these per-project in `.claude/settings.json` under `"env"`, or export them i
 
 ## How It Works
 
-Short-lived Go CLI invoked by Claude Code via stdin JSON. **PostToolUse** / **PostToolUseFailure** and **SubagentStop** record data locally with zero network calls (< 10ms). On **Stop**, the hook parses the session transcript, builds the span tree, and exports via OTLP/HTTP.
+Short-lived Go CLI invoked by Claude Code via stdin JSON. **SessionStart** rotates the trace when `CC_TRACE_ROTATE` is enabled. **PostToolUse** / **PostToolUseFailure** and **SubagentStop** record data locally with zero network calls (< 10ms). On **Stop**, the hook parses the session transcript, builds the span tree, and exports via OTLP/HTTP.

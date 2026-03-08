@@ -1,0 +1,9 @@
+{
+  "session_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "transcript_path": "/home/testuser/.claude/projects/test-project/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl",
+  "cwd": "/home/testuser/projects/cc-trace",
+  "hook_event_name": "SessionStart",
+  "permission_mode": "default",
+  "source": "resume",
+  "model": "claude-sonnet-4-6"
+}

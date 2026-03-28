@@ -279,3 +279,22 @@ func TestLoadState_FromFixture(t *testing.T) {
 		t.Errorf("ToolName: got %q, want %q", ss.ToolSpans[0].ToolName, "Read")
 	}
 }
+
+func TestAcquireLock_MissingDirectory(t *testing.T) {
+	// Init with a temp dir but do NOT create the .claude/state/ subdirectory.
+	dir := t.TempDir()
+	Init(dir)
+	logging.Init(filepath.Join(dir, "test.log"), false)
+
+	// AcquireLock should succeed even when the state directory does not exist.
+	if !AcquireLock() {
+		t.Fatal("AcquireLock should succeed when state directory is missing (should create it)")
+	}
+	ReleaseLock()
+
+	// Verify the directory was created.
+	stateDir := filepath.Join(dir, ".claude", "state")
+	if _, err := os.Stat(stateDir); os.IsNotExist(err) {
+		t.Fatal("state directory should have been created by AcquireLock")
+	}
+}

@@ -60,9 +60,10 @@ Add to your global Claude Code settings (`~/.claude/settings.json`):
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP/HTTP endpoint (appends `/v1/traces`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP endpoint -- `http://` or `https://` (appends `/v1/traces`) |
 | `OTEL_SERVICE_NAME` | `unknown_service` | `service.name` resource attribute |
 | `OTEL_RESOURCE_ATTRIBUTES` | — | Comma-separated `key=value` pairs (e.g. `project.name=myapp`) |
+| `OTEL_EXPORTER_OTLP_HEADERS` | — | Comma-separated `key=value` headers for OTLP requests (e.g. `Authorization=Bearer xxx`). Read automatically by the OTel SDK |
 | `CC_TRACE_DEBUG` | `false` | Debug log to `~/.claude/state/cc_trace.log` |
 | `CC_TRACE_TIMING` | `false` | Phase-level timing logs to `~/.claude/state/cc_trace.log` |
 | `CC_TRACE_DUMP` | `false` | Dump raw hook payloads and transcripts to `/tmp/cc-trace/dumps/` |

@@ -33,6 +33,20 @@ func traceIDFromSession(sessionID string, epoch int) trace.TraceID {
 	return tid
 }
 
+// isInsecureEndpoint checks the configured OTLP endpoint scheme.
+// Returns true if the endpoint uses http:// (or is unset, defaulting to http://localhost:4318).
+// Returns false for https:// endpoints, allowing TLS to be used.
+func isInsecureEndpoint() bool {
+	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if endpoint == "" {
+		endpoint = os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+	}
+	if endpoint == "" {
+		return true // no endpoint configured, default is http://localhost:4318
+	}
+	return !strings.HasPrefix(endpoint, "https://")
+}
+
 // InitTracer sets up the OTel TracerProvider with OTLP HTTP exporter.
 //
 // All configuration is read from standard OTel environment variables:
@@ -42,10 +56,14 @@ func traceIDFromSession(sessionID string, epoch int) trace.TraceID {
 func InitTracer() (func(), error) {
 	ctx := context.Background()
 
-	exporter, err := otlptracehttp.New(ctx,
-		otlptracehttp.WithInsecure(),
-		otlptracehttp.WithTimeout(60*time.Second),
-	)
+	opts := []otlptracehttp.Option{
+		otlptracehttp.WithTimeout(60 * time.Second),
+	}
+	if isInsecureEndpoint() {
+		opts = append(opts, otlptracehttp.WithInsecure())
+	}
+
+	exporter, err := otlptracehttp.New(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create exporter: %w", err)
 	}

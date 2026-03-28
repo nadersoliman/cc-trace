@@ -30,6 +30,7 @@ const staleSessionAge = 24 * time.Hour
 // Returns true if the lock was acquired, false otherwise.
 // Stale locks older than staleLockAge are automatically removed.
 func AcquireLock() bool {
+	_ = os.MkdirAll(filepath.Dir(lockFilePath), 0o755)
 	if info, err := os.Stat(lockFilePath); err == nil {
 		if time.Since(info.ModTime()) > staleLockAge {
 			logging.Debug("Removing stale lock file")

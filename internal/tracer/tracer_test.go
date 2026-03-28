@@ -719,3 +719,29 @@ func TestExportSessionTrace_TraceparentSuppressesRotation(t *testing.T) {
 		t.Errorf("expected 0 Session spans (reusing existing), got %d", len(sessionSpans))
 	}
 }
+
+func TestIsInsecureEndpoint(t *testing.T) {
+	tests := []struct {
+		name     string
+		endpoint string
+		traces   string
+		want     bool
+	}{
+		{"http explicit", "http://localhost:4318", "", true},
+		{"https explicit", "https://otel.example.com", "", false},
+		{"empty defaults to insecure", "", "", true},
+		{"traces endpoint http", "", "http://localhost:4318/v1/traces", true},
+		{"traces endpoint https", "", "https://otel.example.com/v1/traces", false},
+		{"endpoint takes precedence", "https://otel.example.com", "http://localhost:4318/v1/traces", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", tt.endpoint)
+			t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", tt.traces)
+			if got := isInsecureEndpoint(); got != tt.want {
+				t.Errorf("isInsecureEndpoint() = %v, want %v (endpoint=%q traces=%q)", got, tt.want, tt.endpoint, tt.traces)
+			}
+		})
+	}
+}

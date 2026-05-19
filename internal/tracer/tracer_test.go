@@ -1,6 +1,8 @@
 package tracer
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	"cc-trace/internal/hook"
 	"cc-trace/internal/logging"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
@@ -717,6 +720,262 @@ func TestExportSessionTrace_TraceparentSuppressesRotation(t *testing.T) {
 	sessionSpans := findSpans(spans2, "Session")
 	if len(sessionSpans) != 0 {
 		t.Errorf("expected 0 Session spans (reusing existing), got %d", len(sessionSpans))
+	}
+}
+
+func TestLogExportConfig(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "test.log")
+	logging.Init(logFile, true) // debug=true
+
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "https://otel.example.com")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "CF-Access-Client-Id=abc123,CF-Access-Client-Secret=supersecretvalue")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "project.name=test")
+	t.Setenv("OTEL_SERVICE_NAME", "test-service")
+	t.Setenv("OTEL_EXPORTER_OTLP_CERTIFICATE", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_CLIENT_KEY", "")
+	t.Setenv("CLAUDE_ENV_FILE", "")
+
+	logExportConfig()
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	log := string(data)
+
+	// Should log endpoint and insecure state.
+	if !strings.Contains(log, "endpoint=https://otel.example.com/v1/traces") {
+		t.Errorf("log missing endpoint line, got:\n%s", log)
+	}
+	if !strings.Contains(log, "insecure=false") {
+		t.Errorf("log missing insecure=false, got:\n%s", log)
+	}
+
+	// Should log env vars with present/absent.
+	if !strings.Contains(log, "OTEL_EXPORTER_OTLP_ENDPOINT=") && !strings.Contains(log, "present") {
+		t.Errorf("log missing OTEL_EXPORTER_OTLP_ENDPOINT, got:\n%s", log)
+	}
+
+	// Headers should show keys but redact sensitive values.
+	if !strings.Contains(log, "OTEL_EXPORTER_OTLP_HEADERS=") {
+		t.Errorf("log missing OTEL_EXPORTER_OTLP_HEADERS, got:\n%s", log)
+	}
+	if !strings.Contains(log, "CF-Access-Client-Secret=[REDACTED") {
+		t.Errorf("log should redact CF-Access-Client-Secret, got:\n%s", log)
+	}
+	if strings.Contains(log, "supersecretvalue") {
+		t.Errorf("log should NOT contain raw secret value, got:\n%s", log)
+	}
+
+	// Absent vars should show (absent).
+	if !strings.Contains(log, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=(absent)") {
+		t.Errorf("log missing absent TRACES_ENDPOINT, got:\n%s", log)
+	}
+}
+
+func TestLogExportConfig_DefaultEndpoint(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "test.log")
+	logging.Init(logFile, true)
+
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "")
+	t.Setenv("OTEL_SERVICE_NAME", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_CERTIFICATE", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_CLIENT_KEY", "")
+	t.Setenv("CLAUDE_ENV_FILE", "")
+
+	logExportConfig()
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	log := string(data)
+
+	if !strings.Contains(log, "insecure=true") {
+		t.Errorf("log should show insecure=true for default endpoint, got:\n%s", log)
+	}
+	if !strings.Contains(log, "default") {
+		t.Errorf("log should indicate default endpoint, got:\n%s", log)
+	}
+}
+
+func TestLogExportConfig_ClaudeEnvFile(t *testing.T) {
+	dir := t.TempDir()
+	logFile := filepath.Join(dir, "test.log")
+	logging.Init(logFile, true)
+
+	// Create a fake env file.
+	envFile := filepath.Join(dir, "env.sh")
+	os.WriteFile(envFile, []byte("export FOO=bar"), 0o644)
+
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "")
+	t.Setenv("OTEL_SERVICE_NAME", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_CERTIFICATE", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_CLIENT_KEY", "")
+	t.Setenv("CLAUDE_ENV_FILE", envFile)
+
+	logExportConfig()
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	log := string(data)
+
+	if !strings.Contains(log, "CLAUDE_ENV_FILE=") {
+		t.Errorf("log missing CLAUDE_ENV_FILE line, got:\n%s", log)
+	}
+	if !strings.Contains(log, "file exists=true") {
+		t.Errorf("log should show file exists=true, got:\n%s", log)
+	}
+}
+
+func TestShutdownLogging(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "test.log")
+	logging.Init(logFile, true) // debug=true
+
+	exporter := tracetest.NewInMemoryExporter()
+	shutdown, _, err := InitTracerWithExporter(exporter)
+	if err != nil {
+		t.Fatalf("InitTracerWithExporter: %v", err)
+	}
+
+	// Call shutdown — should log duration and error.
+	shutdown()
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	log := string(data)
+
+	if !strings.Contains(log, "Shutdown: duration=") {
+		t.Errorf("log missing Shutdown duration line, got:\n%s", log)
+	}
+	if !strings.Contains(log, "err=<nil>") {
+		t.Errorf("log missing err=<nil>, got:\n%s", log)
+	}
+}
+
+func TestShutdownLogging_OnlyOnce(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "test.log")
+	logging.Init(logFile, true)
+
+	exporter := tracetest.NewInMemoryExporter()
+	shutdown, _, err := InitTracerWithExporter(exporter)
+	if err != nil {
+		t.Fatalf("InitTracerWithExporter: %v", err)
+	}
+
+	// Call shutdown twice (simulates defer + explicit in handleStop).
+	shutdown()
+	shutdown()
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	log := string(data)
+
+	// Should only appear once.
+	count := strings.Count(log, "Shutdown: duration=")
+	if count != 1 {
+		t.Errorf("expected exactly 1 Shutdown log line, got %d:\n%s", count, log)
+	}
+}
+
+func TestOtelErrorHandler(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "test.log")
+	logging.Init(logFile, true)
+
+	exporter := tracetest.NewInMemoryExporter()
+	shutdown, _, err := InitTracerWithExporter(exporter)
+	if err != nil {
+		t.Fatalf("InitTracerWithExporter: %v", err)
+	}
+	defer shutdown()
+
+	// Trigger the error handler manually via the global otel package.
+	otel.Handle(fmt.Errorf("test transport error: connection refused"))
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	log := string(data)
+
+	if !strings.Contains(log, "OTel SDK error") {
+		t.Errorf("log missing OTel SDK error line, got:\n%s", log)
+	}
+	if !strings.Contains(log, "connection refused") {
+		t.Errorf("log missing error details, got:\n%s", log)
+	}
+}
+
+func TestExportSessionTrace_DebugLogsSpanCount(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "test.log")
+	logging.Init(logFile, true) // debug=true
+
+	exporter := tracetest.NewInMemoryExporter()
+	shutdown, flush, err := InitTracerWithExporter(exporter)
+	if err != nil {
+		t.Fatalf("InitTracerWithExporter: %v", err)
+	}
+	defer shutdown()
+
+	sessionID := "test-session-span-count"
+	now := time.Now()
+
+	// 1 turn with model + 1 tool = session(1) + turn(1) + LLM(1) + tool(1) = 4 spans
+	turns := []hook.Turn{
+		{
+			Number:    1,
+			Model:     "claude-sonnet-4-20250514",
+			StartTime: now,
+			EndTime:   now.Add(3 * time.Second),
+			ToolCalls: []hook.ToolCall{
+				{
+					Name:      "Read",
+					ID:        "toolu_001",
+					Success:   true,
+					StartTime: now.Add(500 * time.Millisecond),
+					EndTime:   now.Add(1 * time.Second),
+				},
+			},
+		},
+	}
+
+	ss := &hook.SessionState{}
+	ExportSessionTrace(sessionID, turns, nil, nil, ss, false)
+	flush()
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	log := string(data)
+
+	if !strings.Contains(log, "ExportSessionTrace: spans=4") {
+		t.Errorf("log should show spans=4, got:\n%s", log)
+	}
+	if !strings.Contains(log, "turns=1") {
+		t.Errorf("log should show turns=1, got:\n%s", log)
 	}
 }
 

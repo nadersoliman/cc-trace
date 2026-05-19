@@ -755,9 +755,9 @@ func TestLogExportConfig(t *testing.T) {
 		t.Errorf("log missing insecure=false, got:\n%s", log)
 	}
 
-	// Should log env vars with present/absent.
-	if !strings.Contains(log, "OTEL_EXPORTER_OTLP_ENDPOINT=") && !strings.Contains(log, "present") {
-		t.Errorf("log missing OTEL_EXPORTER_OTLP_ENDPOINT, got:\n%s", log)
+	// Should log env vars with source (direct/relayed).
+	if !strings.Contains(log, "OTEL_EXPORTER_OTLP_ENDPOINT=") || !strings.Contains(log, "direct") {
+		t.Errorf("log missing OTEL_EXPORTER_OTLP_ENDPOINT with direct source, got:\n%s", log)
 	}
 
 	// Headers should show keys but redact sensitive values.
@@ -774,6 +774,40 @@ func TestLogExportConfig(t *testing.T) {
 	// Absent vars should show (absent).
 	if !strings.Contains(log, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=(absent)") {
 		t.Errorf("log missing absent TRACES_ENDPOINT, got:\n%s", log)
+	}
+}
+
+func TestLogExportConfig_RelayedSource(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "test.log")
+	logging.Init(logFile, true)
+
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "https://otel.example.com")
+	t.Setenv("CC_TRACE_OTEL_EXPORTER_OTLP_ENDPOINT", "https://otel.example.com")
+	t.Setenv("OTEL_SERVICE_NAME", "test-service")
+	t.Setenv("CC_TRACE_OTEL_SERVICE_NAME", "test-service")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_CERTIFICATE", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_CLIENT_KEY", "")
+	t.Setenv("CLAUDE_ENV_FILE", "")
+
+	logExportConfig()
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	log := string(data)
+
+	if !strings.Contains(log, "OTEL_EXPORTER_OTLP_ENDPOINT=") || !strings.Contains(log, "relayed") {
+		t.Errorf("log should show relayed source for endpoint, got:\n%s", log)
+	}
+	if !strings.Contains(log, "OTEL_SERVICE_NAME=") || !strings.Contains(log, "relayed") {
+		t.Errorf("log should show relayed source for service name, got:\n%s", log)
 	}
 }
 

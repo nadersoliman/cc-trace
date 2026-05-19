@@ -22,6 +22,30 @@ var (
 	dumpDir       = "/tmp/cc-trace/dumps"
 )
 
+const ccTraceOtelPrefix = "CC_TRACE_OTEL_"
+
+func relayOtelEnv() int {
+	count := 0
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, ccTraceOtelPrefix) {
+			continue
+		}
+		idx := strings.Index(entry, "=")
+		if idx < 0 {
+			continue
+		}
+		key := entry[:idx]
+		val := entry[idx+1:]
+		target := strings.TrimPrefix(key, "CC_TRACE_")
+		if _, exists := os.LookupEnv(target); exists {
+			continue
+		}
+		os.Setenv(target, val)
+		count++
+	}
+	return count
+}
+
 func main() {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -35,6 +59,12 @@ func main() {
 	timingEnabled := strings.EqualFold(os.Getenv("CC_TRACE_TIMING"), "true")
 	logging.Init(logFilePath, debugEnabled)
 	logging.InitTiming(timingEnabled)
+
+	relayed := relayOtelEnv()
+	if relayed > 0 {
+		logging.Debug(fmt.Sprintf("Relayed %d CC_TRACE_OTEL_* vars to OTEL_*", relayed))
+	}
+
 	state.Init(homeDir)
 
 	defer func() {

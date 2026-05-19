@@ -58,26 +58,51 @@ Add to your global Claude Code settings (`~/.claude/settings.json`):
 
 ## Environment Variables
 
+### OTel Configuration (via `CC_TRACE_OTEL_*` relay)
+
+Claude Code v2.1.128+ strips all `OTEL_*` env vars from hook subprocesses. To pass OTel configuration to cc-trace, prefix them with `CC_TRACE_` — the hook strips the prefix at startup and sets the corresponding `OTEL_*` var before initializing the SDK. If a direct `OTEL_*` var is already present, it takes precedence.
+
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP endpoint -- `http://` or `https://` (appends `/v1/traces`) |
-| `OTEL_SERVICE_NAME` | `unknown_service` | `service.name` resource attribute |
-| `OTEL_RESOURCE_ATTRIBUTES` | — | Comma-separated `key=value` pairs (e.g. `project.name=myapp`) |
-| `OTEL_EXPORTER_OTLP_HEADERS` | — | Comma-separated `key=value` headers for OTLP requests (e.g. `Authorization=Bearer xxx`). Read automatically by the OTel SDK |
-| `CC_TRACE_DEBUG` | `false` | Debug log to `~/.claude/state/cc_trace.log`. When enabled, logs resolved endpoint URL, transport mode (HTTP/HTTPS + insecure flag), presence and redacted values of all `OTEL_*` env vars, `CLAUDE_ENV_FILE` status, span export counts, Shutdown error/duration, and async OTel SDK transport errors. Sensitive values (keys matching `secret`, `token`, `bearer`, `authorization`, `cookie`, `api-key`, `client-secret`, or ending in `_KEY`) are redacted as `[REDACTED len=N]` |
+| `CC_TRACE_OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP endpoint -- `http://` or `https://` (appends `/v1/traces`) |
+| `CC_TRACE_OTEL_SERVICE_NAME` | `unknown_service` | `service.name` resource attribute |
+| `CC_TRACE_OTEL_RESOURCE_ATTRIBUTES` | — | Comma-separated `key=value` pairs (e.g. `project.name=myapp`) |
+| `CC_TRACE_OTEL_EXPORTER_OTLP_HEADERS` | — | Comma-separated `key=value` headers for OTLP requests (e.g. `Authorization=Bearer xxx`) |
+
+Any `CC_TRACE_OTEL_*` var works — the relay is mechanical, not a hardcoded whitelist.
+
+### cc-trace Settings
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `CC_TRACE_DEBUG` | `false` | Debug log to `~/.claude/state/cc_trace.log`. When enabled, logs relay activity, resolved endpoint URL, transport mode (HTTP/HTTPS + insecure flag), presence and redacted values of all `OTEL_*` env vars, span export counts, Shutdown error/duration, and async OTel SDK transport errors. Sensitive values (keys matching `secret`, `token`, `bearer`, `authorization`, `cookie`, `api-key`, `client-secret`, or ending in `_KEY`) are redacted as `[REDACTED len=N]` |
 | `CC_TRACE_TIMING` | `false` | Phase-level timing logs to `~/.claude/state/cc_trace.log` |
 | `CC_TRACE_DUMP` | `false` | Dump raw hook payloads and transcripts to `/tmp/cc-trace/dumps/` |
 | `CC_TRACE_ROTATE` | `false` | Rotate trace ID per session segment. Each SessionStart (startup/resume/clear/compact) on an existing session creates a new trace, preventing long-lived sessions from outliving backend retention. Search by `session.id` attribute to find all segments. Ignored when `TRACEPARENT` is set -- the external trace owns the trace ID. |
 | `TRACEPARENT` | — | [W3C Trace Context](https://www.w3.org/TR/trace-context/) parent. When set, the session trace becomes a child of the external trace (e.g. a CI pipeline span). Format: `00-<trace_id>-<span_id>-<flags>` |
 
-Set these per-project in `.claude/settings.json` under `"env"`, or export them in your shell:
+### Minimum Setup
+
+```jsonc
+// ~/.claude/settings.json
+{
+  "env": {
+    "CC_TRACE_OTEL_EXPORTER_OTLP_ENDPOINT": "https://otel.example.com",
+    "CC_TRACE_OTEL_EXPORTER_OTLP_HEADERS": "Authorization=Bearer YOUR_TOKEN"
+  }
+}
+```
+
+For a local collector on default port, no env vars are needed — the OTel SDK defaults to `http://localhost:4318`.
+
+Optional enrichment per-project in `.claude/settings.json`:
 
 ```jsonc
 // .claude/settings.json (project-level)
 {
   "env": {
-    "OTEL_SERVICE_NAME": "my-project",
-    "OTEL_RESOURCE_ATTRIBUTES": "project.name=my-project"
+    "CC_TRACE_OTEL_SERVICE_NAME": "my-project",
+    "CC_TRACE_OTEL_RESOURCE_ATTRIBUTES": "project.name=my-project"
   }
 }
 ```

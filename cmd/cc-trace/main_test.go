@@ -394,6 +394,99 @@ func TestHandleSessionStart_RotateDisabled_NoOp(t *testing.T) {
 	}
 }
 
+func TestRelayOtelEnv_SingleVar(t *testing.T) {
+	t.Setenv("CC_TRACE_OTEL_EXPORTER_OTLP_ENDPOINT", "https://example.com")
+	os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+
+	count := relayOtelEnv()
+
+	if count != 1 {
+		t.Errorf("relayOtelEnv() = %d, want 1", count)
+	}
+	got := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if got != "https://example.com" {
+		t.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want %q", got, "https://example.com")
+	}
+}
+
+func TestRelayOtelEnv_MultipleVars(t *testing.T) {
+	t.Setenv("CC_TRACE_OTEL_EXPORTER_OTLP_ENDPOINT", "https://example.com")
+	t.Setenv("CC_TRACE_OTEL_SERVICE_NAME", "my-service")
+	t.Setenv("CC_TRACE_OTEL_EXPORTER_OTLP_HEADERS", "Authorization=Bearer xxx")
+	os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	os.Unsetenv("OTEL_SERVICE_NAME")
+	os.Unsetenv("OTEL_EXPORTER_OTLP_HEADERS")
+
+	count := relayOtelEnv()
+
+	if count != 3 {
+		t.Errorf("relayOtelEnv() = %d, want 3", count)
+	}
+	if got := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); got != "https://example.com" {
+		t.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT = %q", got)
+	}
+	if got := os.Getenv("OTEL_SERVICE_NAME"); got != "my-service" {
+		t.Errorf("OTEL_SERVICE_NAME = %q", got)
+	}
+	if got := os.Getenv("OTEL_EXPORTER_OTLP_HEADERS"); got != "Authorization=Bearer xxx" {
+		t.Errorf("OTEL_EXPORTER_OTLP_HEADERS = %q", got)
+	}
+}
+
+func TestRelayOtelEnv_DirectEnvWins(t *testing.T) {
+	t.Setenv("CC_TRACE_OTEL_EXPORTER_OTLP_ENDPOINT", "https://relayed.com")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "https://direct.com")
+
+	count := relayOtelEnv()
+
+	if count != 0 {
+		t.Errorf("relayOtelEnv() = %d, want 0 (direct env should win)", count)
+	}
+	got := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if got != "https://direct.com" {
+		t.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want %q (direct should be preserved)", got, "https://direct.com")
+	}
+}
+
+func TestRelayOtelEnv_IgnoresNonOtelPrefix(t *testing.T) {
+	t.Setenv("CC_TRACE_DEBUG", "true")
+	t.Setenv("CC_TRACE_TIMING", "true")
+	os.Unsetenv("DEBUG")
+	os.Unsetenv("TIMING")
+
+	count := relayOtelEnv()
+
+	if count != 0 {
+		t.Errorf("relayOtelEnv() = %d, want 0 (CC_TRACE_DEBUG/TIMING are not OTEL vars)", count)
+	}
+}
+
+func TestRelayOtelEnv_EmptyValue(t *testing.T) {
+	t.Setenv("CC_TRACE_OTEL_EXPORTER_OTLP_PROTOCOL", "")
+	os.Unsetenv("OTEL_EXPORTER_OTLP_PROTOCOL")
+
+	count := relayOtelEnv()
+
+	if count != 1 {
+		t.Errorf("relayOtelEnv() = %d, want 1 (empty value should still relay)", count)
+	}
+	val, ok := os.LookupEnv("OTEL_EXPORTER_OTLP_PROTOCOL")
+	if !ok {
+		t.Error("OTEL_EXPORTER_OTLP_PROTOCOL not set, want set with empty value")
+	}
+	if val != "" {
+		t.Errorf("OTEL_EXPORTER_OTLP_PROTOCOL = %q, want empty", val)
+	}
+}
+
+func TestRelayOtelEnv_NoVars(t *testing.T) {
+	count := relayOtelEnv()
+
+	if count != 0 {
+		t.Errorf("relayOtelEnv() = %d, want 0", count)
+	}
+}
+
 func TestHandleSessionStart_TraceparentSuppresses(t *testing.T) {
 	setupTestStateDir(t)
 	rotateEnabled = true

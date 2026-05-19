@@ -87,7 +87,7 @@ func logExportConfig() {
 			if _, relayed := os.LookupEnv("CC_TRACE_" + name); relayed {
 				source = "relayed"
 			}
-			logging.Debug(fmt.Sprintf("env: %s=%s (len=%d, %s)", name, logging.Redact(val, name), len(val), source))
+			logging.Debug(fmt.Sprintf("env: %s=%s (%s)", name, logging.Redact(val, name), source))
 		}
 	}
 

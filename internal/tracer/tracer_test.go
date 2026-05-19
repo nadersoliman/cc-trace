@@ -723,10 +723,22 @@ func TestExportSessionTrace_TraceparentSuppressesRotation(t *testing.T) {
 	}
 }
 
+func clearCCTraceOtelEnv(t *testing.T) {
+	t.Helper()
+	for _, entry := range os.Environ() {
+		if strings.HasPrefix(entry, "CC_TRACE_OTEL_") {
+			key := entry[:strings.Index(entry, "=")]
+			t.Setenv(key, "")
+			os.Unsetenv(key)
+		}
+	}
+}
+
 func TestLogExportConfig(t *testing.T) {
 	logFile := filepath.Join(t.TempDir(), "test.log")
 	logging.Init(logFile, true) // debug=true
 
+	clearCCTraceOtelEnv(t)
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "https://otel.example.com")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
 	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "CF-Access-Client-Id=abc123,CF-Access-Client-Secret=supersecretvalue")
@@ -755,9 +767,12 @@ func TestLogExportConfig(t *testing.T) {
 		t.Errorf("log missing insecure=false, got:\n%s", log)
 	}
 
-	// Should log env vars with source (direct/relayed).
-	if !strings.Contains(log, "OTEL_EXPORTER_OTLP_ENDPOINT=") || !strings.Contains(log, "direct") {
-		t.Errorf("log missing OTEL_EXPORTER_OTLP_ENDPOINT with direct source, got:\n%s", log)
+	// Direct vars should show bare OTEL_* name (no CC_TRACE_ prefix).
+	if !strings.Contains(log, "env: OTEL_EXPORTER_OTLP_ENDPOINT=") {
+		t.Errorf("log missing OTEL_EXPORTER_OTLP_ENDPOINT, got:\n%s", log)
+	}
+	if strings.Contains(log, "CC_TRACE_OTEL_EXPORTER_OTLP_ENDPOINT") {
+		t.Errorf("direct var should NOT show CC_TRACE_ prefix, got:\n%s", log)
 	}
 
 	// Headers should show keys but redact sensitive values.
@@ -803,11 +818,11 @@ func TestLogExportConfig_RelayedSource(t *testing.T) {
 	}
 	log := string(data)
 
-	if !strings.Contains(log, "OTEL_EXPORTER_OTLP_ENDPOINT=") || !strings.Contains(log, "relayed") {
-		t.Errorf("log should show relayed source for endpoint, got:\n%s", log)
+	if !strings.Contains(log, "env: CC_TRACE_OTEL_EXPORTER_OTLP_ENDPOINT=") {
+		t.Errorf("relayed var should show CC_TRACE_ prefix for endpoint, got:\n%s", log)
 	}
-	if !strings.Contains(log, "OTEL_SERVICE_NAME=") || !strings.Contains(log, "relayed") {
-		t.Errorf("log should show relayed source for service name, got:\n%s", log)
+	if !strings.Contains(log, "env: CC_TRACE_OTEL_SERVICE_NAME=") {
+		t.Errorf("relayed var should show CC_TRACE_ prefix for service name, got:\n%s", log)
 	}
 }
 

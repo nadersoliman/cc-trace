@@ -56,13 +56,23 @@ Session Root
 
 ## Environment Variables
 
-All configuration follows the [OTel environment variable specification](https://opentelemetry.io/docs/languages/sdk-configuration/). The Go SDK reads these automatically.
+### OTel Config Relay (`CC_TRACE_OTEL_*`)
+
+Claude Code v2.1.128+ strips `OTEL_*` env vars from hook subprocesses. cc-trace works around this by reading `CC_TRACE_OTEL_*` vars at startup, stripping the `CC_TRACE_` prefix, and setting the corresponding `OTEL_*` var via `os.Setenv` — but only if the target is not already present (direct `OTEL_*` wins). This happens in `relayOtelEnv()` in `main.go`, before `InitTracer`.
 
 | Variable | OTel Spec Default | Purpose |
 |----------|-------------------|---------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Base OTLP endpoint. Supports both `http://` and `https://` schemes. The HTTP exporter appends `/v1/traces` automatically. Shared with Claude Code's metrics/logs -- no separate traces endpoint needed. |
-| `OTEL_SERVICE_NAME` | `unknown_service` | `service.name` resource attribute |
-| `OTEL_RESOURCE_ATTRIBUTES` | (none) | Comma-separated `key=value` pairs added to the trace resource (e.g., `project.name=k8s-lab`) |
+| `CC_TRACE_OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Base OTLP endpoint. HTTP exporter appends `/v1/traces` automatically. |
+| `CC_TRACE_OTEL_SERVICE_NAME` | `unknown_service` | `service.name` resource attribute |
+| `CC_TRACE_OTEL_RESOURCE_ATTRIBUTES` | (none) | Comma-separated `key=value` pairs added to the trace resource (e.g., `project.name=k8s-lab`) |
+| `CC_TRACE_OTEL_EXPORTER_OTLP_HEADERS` | (none) | Auth headers for OTLP requests (e.g., `Authorization=Bearer xxx`) |
+
+Any `CC_TRACE_OTEL_*` var is relayed — the mechanism is a mechanical prefix strip, not a whitelist.
+
+### cc-trace Settings
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
 | `CC_TRACE_DEBUG` | `false` | Debug logging to `~/.claude/state/cc_trace.log` |
 | `CC_TRACE_TIMING` | `false` | Phase-level timing logs to `~/.claude/state/cc_trace.log` (format: `total=Nms EventName session=... phase=Nms ...`) |
 | `CC_TRACE_DUMP` | `false` | Dump raw hook payloads and transcripts to `/tmp/cc-trace/dumps/` for investigation |

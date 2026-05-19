@@ -394,7 +394,21 @@ func TestHandleSessionStart_RotateDisabled_NoOp(t *testing.T) {
 	}
 }
 
+func setupRelayTest(t *testing.T) {
+	t.Helper()
+	logFile := filepath.Join(t.TempDir(), "test.log")
+	logging.Init(logFile, true)
+	for _, entry := range os.Environ() {
+		if strings.HasPrefix(entry, "CC_TRACE_OTEL_") {
+			key := entry[:strings.Index(entry, "=")]
+			t.Setenv(key, "")
+			os.Unsetenv(key)
+		}
+	}
+}
+
 func TestRelayOtelEnv_SingleVar(t *testing.T) {
+	setupRelayTest(t)
 	t.Setenv("CC_TRACE_OTEL_EXPORTER_OTLP_ENDPOINT", "https://example.com")
 	os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
@@ -410,6 +424,7 @@ func TestRelayOtelEnv_SingleVar(t *testing.T) {
 }
 
 func TestRelayOtelEnv_MultipleVars(t *testing.T) {
+	setupRelayTest(t)
 	t.Setenv("CC_TRACE_OTEL_EXPORTER_OTLP_ENDPOINT", "https://example.com")
 	t.Setenv("CC_TRACE_OTEL_SERVICE_NAME", "my-service")
 	t.Setenv("CC_TRACE_OTEL_EXPORTER_OTLP_HEADERS", "Authorization=Bearer xxx")
@@ -434,6 +449,7 @@ func TestRelayOtelEnv_MultipleVars(t *testing.T) {
 }
 
 func TestRelayOtelEnv_DirectEnvWins(t *testing.T) {
+	setupRelayTest(t)
 	t.Setenv("CC_TRACE_OTEL_EXPORTER_OTLP_ENDPOINT", "https://relayed.com")
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "https://direct.com")
 
@@ -449,6 +465,7 @@ func TestRelayOtelEnv_DirectEnvWins(t *testing.T) {
 }
 
 func TestRelayOtelEnv_IgnoresNonOtelPrefix(t *testing.T) {
+	setupRelayTest(t)
 	t.Setenv("CC_TRACE_DEBUG", "true")
 	t.Setenv("CC_TRACE_TIMING", "true")
 	os.Unsetenv("DEBUG")
@@ -462,6 +479,7 @@ func TestRelayOtelEnv_IgnoresNonOtelPrefix(t *testing.T) {
 }
 
 func TestRelayOtelEnv_EmptyValue(t *testing.T) {
+	setupRelayTest(t)
 	t.Setenv("CC_TRACE_OTEL_EXPORTER_OTLP_PROTOCOL", "")
 	os.Unsetenv("OTEL_EXPORTER_OTLP_PROTOCOL")
 
@@ -480,6 +498,7 @@ func TestRelayOtelEnv_EmptyValue(t *testing.T) {
 }
 
 func TestRelayOtelEnv_NoVars(t *testing.T) {
+	setupRelayTest(t)
 	count := relayOtelEnv()
 
 	if count != 0 {

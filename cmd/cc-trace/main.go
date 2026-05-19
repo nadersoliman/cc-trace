@@ -38,9 +38,11 @@ func relayOtelEnv() int {
 		val := entry[idx+1:]
 		target := strings.TrimPrefix(key, "CC_TRACE_")
 		if _, exists := os.LookupEnv(target); exists {
+			logging.Debug(fmt.Sprintf("Relay skip: %s (direct %s already set)", key, target))
 			continue
 		}
 		os.Setenv(target, val)
+		logging.Debug(fmt.Sprintf("Relay: %s → %s=%s", key, target, logging.Redact(val, key)))
 		count++
 	}
 	return count
@@ -60,10 +62,7 @@ func main() {
 	logging.Init(logFilePath, debugEnabled)
 	logging.InitTiming(timingEnabled)
 
-	relayed := relayOtelEnv()
-	if relayed > 0 {
-		logging.Debug(fmt.Sprintf("Relayed %d CC_TRACE_OTEL_* vars to OTEL_*", relayed))
-	}
+	relayOtelEnv()
 
 	state.Init(homeDir)
 

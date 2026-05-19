@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"cc-trace/internal/hook"
@@ -47,6 +48,69 @@ func isInsecureEndpoint() bool {
 	return !strings.HasPrefix(endpoint, "https://")
 }
 
+func logExportConfig() {
+	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	tracesEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+
+	resolvedEndpoint := endpoint
+	if resolvedEndpoint == "" {
+		resolvedEndpoint = tracesEndpoint
+	}
+
+	insecure := isInsecureEndpoint()
+	if resolvedEndpoint == "" {
+		logging.Debug(fmt.Sprintf("InitTracer: endpoint=http://localhost:4318/v1/traces insecure=true (scheme=http, default — no OTEL_EXPORTER_OTLP_ENDPOINT set)"))
+	} else {
+		scheme := "http"
+		if strings.HasPrefix(resolvedEndpoint, "https://") {
+			scheme = "https"
+		}
+		logging.Debug(fmt.Sprintf("InitTracer: endpoint=%s/v1/traces insecure=%v (scheme=%s)", resolvedEndpoint, insecure, scheme))
+	}
+
+	envVars := []string{
+		"OTEL_EXPORTER_OTLP_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_PROTOCOL",
+		"OTEL_RESOURCE_ATTRIBUTES",
+		"OTEL_SERVICE_NAME",
+		"OTEL_EXPORTER_OTLP_CERTIFICATE",
+		"OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE",
+		"OTEL_EXPORTER_OTLP_CLIENT_KEY",
+	}
+	for _, name := range envVars {
+		val := os.Getenv(name)
+		if val == "" {
+			logging.Debug(fmt.Sprintf("env: %s=(absent)", name))
+		} else {
+			logging.Debug(fmt.Sprintf("env: %s=%s (len=%d, present)", name, logging.Redact(val, name), len(val)))
+		}
+	}
+
+	headerVars := []string{
+		"OTEL_EXPORTER_OTLP_HEADERS",
+		"OTEL_EXPORTER_OTLP_TRACES_HEADERS",
+	}
+	for _, name := range headerVars {
+		val := os.Getenv(name)
+		if val == "" {
+			logging.Debug(fmt.Sprintf("env: %s=(absent)", name))
+		} else {
+			logging.Debug(fmt.Sprintf("env: %s=%s", name, logging.RedactHeadersEnv(val)))
+		}
+	}
+
+	envFile := os.Getenv("CLAUDE_ENV_FILE")
+	if envFile == "" {
+		logging.Debug("env: CLAUDE_ENV_FILE=(absent)")
+	} else {
+		_, err := os.Stat(envFile)
+		exists := err == nil
+		sourced := exists
+		logging.Debug(fmt.Sprintf("env: CLAUDE_ENV_FILE=%s (len=%d, present, file exists=%v, sourced=%v)", logging.Redact(envFile, "CLAUDE_ENV_FILE"), len(envFile), exists, sourced))
+	}
+}
+
 // InitTracer sets up the OTel TracerProvider with OTLP HTTP exporter.
 //
 // All configuration is read from standard OTel environment variables:
@@ -54,6 +118,8 @@ func isInsecureEndpoint() bool {
 //   - OTEL_SERVICE_NAME (default: unknown_service)
 //   - OTEL_RESOURCE_ATTRIBUTES (default: none)
 func InitTracer() (func(), error) {
+	logExportConfig()
+
 	ctx := context.Background()
 
 	opts := []otlptracehttp.Option{
@@ -96,10 +162,18 @@ func InitTracerWithExporter(exporter sdktrace.SpanExporter) (func(), func(), err
 		sdktrace.WithSpanProcessor(bsp),
 		sdktrace.WithResource(res),
 	)
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+		logging.Debug(fmt.Sprintf("OTel SDK error (via otel.SetErrorHandler): %v", err))
+	}))
 	otel.SetTracerProvider(tp)
 
+	var once sync.Once
 	shutdown := func() {
-		_ = tp.Shutdown(context.Background())
+		once.Do(func() {
+			start := time.Now()
+			err := tp.Shutdown(context.Background())
+			logging.Debug(fmt.Sprintf("Shutdown: duration=%dms err=%v", time.Since(start).Milliseconds(), err))
+		})
 	}
 	flush := func() {
 		_ = tp.ForceFlush(context.Background())
@@ -184,7 +258,19 @@ func ExportSessionTrace(sessionID string, turns []hook.Turn, toolSpanData []hook
 	if sessionSpan != nil {
 		sessionSpan.End(trace.WithTimestamp(sessionEnd))
 	}
-	logging.Debug(fmt.Sprintf("Exported %d turns for session %s", len(turns), truncate(sessionID, 12)))
+
+	spanCount := 0
+	if sessionSpan != nil {
+		spanCount++
+	}
+	for _, turn := range turns {
+		spanCount++
+		if turn.Model != "" {
+			spanCount++
+		}
+		spanCount += len(turn.ToolCalls)
+	}
+	logging.Debug(fmt.Sprintf("ExportSessionTrace: spans=%d (session=%s, turns=%d)", spanCount, truncate(sessionID, 8), len(turns)))
 }
 
 // parseTraceparent reads TRACEPARENT from the environment and returns a context

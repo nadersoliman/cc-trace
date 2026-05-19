@@ -64,7 +64,7 @@ Add to your global Claude Code settings (`~/.claude/settings.json`):
 | `OTEL_SERVICE_NAME` | `unknown_service` | `service.name` resource attribute |
 | `OTEL_RESOURCE_ATTRIBUTES` | — | Comma-separated `key=value` pairs (e.g. `project.name=myapp`) |
 | `OTEL_EXPORTER_OTLP_HEADERS` | — | Comma-separated `key=value` headers for OTLP requests (e.g. `Authorization=Bearer xxx`). Read automatically by the OTel SDK |
-| `CC_TRACE_DEBUG` | `false` | Debug log to `~/.claude/state/cc_trace.log` |
+| `CC_TRACE_DEBUG` | `false` | Debug log to `~/.claude/state/cc_trace.log`. When enabled, logs resolved endpoint URL, transport mode (HTTP/HTTPS + insecure flag), presence and redacted values of all `OTEL_*` env vars, `CLAUDE_ENV_FILE` status, span export counts, Shutdown error/duration, and async OTel SDK transport errors. Sensitive values (keys matching `secret`, `token`, `bearer`, `authorization`, `cookie`, `api-key`, `client-secret`, or ending in `_KEY`) are redacted as `[REDACTED len=N]` |
 | `CC_TRACE_TIMING` | `false` | Phase-level timing logs to `~/.claude/state/cc_trace.log` |
 | `CC_TRACE_DUMP` | `false` | Dump raw hook payloads and transcripts to `/tmp/cc-trace/dumps/` |
 | `CC_TRACE_ROTATE` | `false` | Rotate trace ID per session segment. Each SessionStart (startup/resume/clear/compact) on an existing session creates a new trace, preventing long-lived sessions from outliving backend retention. Search by `session.id` attribute to find all segments. Ignored when `TRACEPARENT` is set -- the external trace owns the trace ID. |

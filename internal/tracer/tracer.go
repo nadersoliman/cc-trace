@@ -83,7 +83,11 @@ func logExportConfig() {
 		if val == "" {
 			logging.Debug(fmt.Sprintf("env: %s=(absent)", name))
 		} else {
-			logging.Debug(fmt.Sprintf("env: %s=%s (len=%d, present)", name, logging.Redact(val, name), len(val)))
+			source := "direct"
+			if _, relayed := os.LookupEnv("CC_TRACE_" + name); relayed {
+				source = "relayed"
+			}
+			logging.Debug(fmt.Sprintf("env: %s=%s (len=%d, %s)", name, logging.Redact(val, name), len(val), source))
 		}
 	}
 
@@ -96,7 +100,11 @@ func logExportConfig() {
 		if val == "" {
 			logging.Debug(fmt.Sprintf("env: %s=(absent)", name))
 		} else {
-			logging.Debug(fmt.Sprintf("env: %s=%s", name, logging.RedactHeadersEnv(val)))
+			source := "direct"
+			if _, relayed := os.LookupEnv("CC_TRACE_" + name); relayed {
+				source = "relayed"
+			}
+			logging.Debug(fmt.Sprintf("env: %s=%s (%s)", name, logging.RedactHeadersEnv(val), source))
 		}
 	}
 
